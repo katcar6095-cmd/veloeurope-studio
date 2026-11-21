@@ -1503,7 +1503,7 @@
       return nearest;
     }
 
-    function shortestMarkedRoutePath(graph, startId, endId) {
+    function shortestMarkedRoutePath(graph, startId, endId, routesById = null) {
       if (startId === endId) {
         return { points: [graph.nodes[startId].point], distanceMeters: 0, routeUsage: new Map() };
       }
@@ -1554,7 +1554,11 @@
         if (current.distance !== distances[current.nodeId]) continue;
         if (current.nodeId === endId) break;
         graph.nodes[current.nodeId].edges.forEach(edge => {
-          const distance = current.distance + edge.distance;
+          const incomingRouteId = previousRouteId[current.nodeId];
+          const changesMarkedRoute = incomingRouteId !== null &&
+            incomingRouteId !== edge.routeId;
+          const weightedDistance = edge.distance * (changesMarkedRoute ? 1.12 : 1);
+          const distance = current.distance + weightedDistance;
           if (distance >= distances[edge.to]) return;
           distances[edge.to] = distance;
           previous[edge.to] = current.nodeId;
@@ -1658,7 +1662,8 @@
             if (crossTrackMeters > maxDeviation) return;
             const binIndex = Math.min(binCount - 1, Math.floor(progress * binCount));
             const current = bestByBin[binIndex];
-            if (!current || crossTrackMeters < current.crossTrackMeters) {
+            if (!current ||
+              crossTrackMeters < current.crossTrackMeters) {
               bestByBin[binIndex] = { point, routeId: feature.id, crossTrackMeters };
             }
           });
@@ -1733,7 +1738,7 @@
       let accessDistanceMeters = 0;
       const routeUsage = new Map();
       for (let i = 1; i < nearestNodes.length; i++) {
-        const path = shortestMarkedRoutePath(graph, nearestNodes[i - 1].nodeId, nearestNodes[i].nodeId);
+        const path = shortestMarkedRoutePath(graph, nearestNodes[i - 1].nodeId, nearestNodes[i].nodeId, routesById);
         if (!path) return corridorRoute();
         paths.push(path);
         totalDistanceMeters += path.distanceMeters;
@@ -2607,7 +2612,15 @@
       const stravaUrl = `https://www.strava.com/maps/global-heatmap?style=dark&terrain=true&sport=Ride#11/${mid.lng.toFixed(4)}/${mid.lat.toFixed(4)}`;
       const komootUrl = `https://www.komoot.com/discover?query=${encoded}&sport=cycling`;
       const garminUrl = `https://connect.garmin.com/modern/courses?search=${encoded}`;
-      const waymarkedUrl = `https://cycling.waymarkedtrails.org/#?map=10!${mid.lat.toFixed(4)}!${mid.lng.toFixed(4)}`;
+      const v512RelationId = String(metaObj.ref || '').toUpperCase() === 'V512' ? '7558655' : null;
+      const wmRelationId = v512RelationId || (Number.isInteger(Number(metaObj.wmRelationId))
+        ? String(Number(metaObj.wmRelationId))
+        : (typeof metaObj.id === 'string' && /^wm-(\d+)$/.test(metaObj.id)
+          ? metaObj.id.replace('wm-', '')
+          : null));
+      const waymarkedUrl = wmRelationId
+        ? `https://cycling.waymarkedtrails.org/#route=${wmRelationId}`
+        : `https://cycling.waymarkedtrails.org/#?map=10!${mid.lat.toFixed(4)}!${mid.lng.toFixed(4)}`;
 
       const renderHTML = (enriched) => {
         const distKm = enriched ? (enriched.distanceMeters / 1000).toFixed(1) : (totalM / 1000).toFixed(1);
