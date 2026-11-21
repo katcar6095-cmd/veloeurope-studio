@@ -139,6 +139,10 @@
       align-items: center;
       gap: 4px;
     }
+    .mobile-panel-toggle,
+    .mobile-panel-close {
+      display: none;
+    }
     .legend-pill {
       position: absolute;
       bottom: 22px;
@@ -328,36 +332,43 @@
     @media (max-width: 820px) {
       html, body { overflow: auto; }
       #app-shell {
-        flex-direction: column;
+        display: block;
         height: 100dvh;
         min-height: 100dvh;
         overflow: hidden;
       }
       #map-container {
-        order: -1;
         flex: none;
         width: 100%;
-        height: 320px;
-        min-height: 320px;
-        max-height: 320px;
+        height: 100dvh;
+        min-height: 100dvh;
+        max-height: 100dvh;
       }
       #map {
-        height: 320px !important;
-        min-height: 320px;
-        max-height: 320px;
+        height: 100dvh !important;
+        min-height: 100dvh;
+        max-height: 100dvh;
       }
       #sidebar {
-        flex: 1 1 auto;
-        order: 2;
-        width: 100%;
-        max-width: 100%;
-        height: calc(100dvh - 320px);
-        min-height: 0;
-        max-height: calc(100dvh - 320px);
-        border-right: none;
-        border-bottom: 1px solid var(--border);
+        display: none;
+      }
+      .mobile-panel-toggle {
+        display: inline-flex;
+      }
+      .mobile-sidebar-open #sidebar {
+        display: flex;
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 2000;
+        width: min(420px, 94vw);
+        max-width: 94vw;
+        height: 100dvh;
+        max-height: 100dvh;
         overflow-y: auto;
-        overscroll-behavior: contain;
+        box-shadow: 8px 0 28px rgba(15, 23, 42, 0.3);
+      }
+      .mobile-panel-close {
+        display: inline-flex;
       }
       #app-header {
         position: static;
@@ -393,19 +404,11 @@
         overflow: hidden;
       }
       #sidebar {
-        order: 1;
-        flex: 0 0 42%;
-        width: 42%;
-        max-width: 42%;
-        height: 100dvh;
-        max-height: 100dvh;
-        border-right: 1px solid var(--border);
-        border-bottom: none;
+        display: none;
       }
       #map-container {
-        order: 2;
-        flex: 1 1 58%;
-        width: 58%;
+        flex: 1 1 100%;
+        width: 100%;
         height: 100dvh;
         min-height: 0;
         max-height: 100dvh;
@@ -430,6 +433,7 @@
           <div class="muted-xs" style="margin-top:3px;">Réseau EuroVelo, Véloroutes Nationales, Voies Vertes &amp; GPS</div>
         </div>
         <div class="row-gap">
+          <button id="btn-mobile-panel-close" class="mobile-panel-close btn btn-outline" type="button" aria-label="Fermer le panneau des parcours">Fermer</button>
           <button id="btn-undo-action" type="button" class="btn btn-outline" style="padding:6px 9px;" title="Revenir en arrière (Ctrl+Z)">↩ Retour</button>
           <button id="btn-reset-all" type="button" class="btn" style="padding:6px 9px;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;" title="Réinitialiser entièrement l'application">Reset tout</button>
         </div>
@@ -710,6 +714,7 @@
 
     <main id="map-container">
       <div class="floating-bar">
+        <button id="btn-mobile-panel-open" class="mobile-panel-toggle btn btn-outline" type="button" aria-controls="sidebar" aria-expanded="false">Parcours</button>
         <button type="button" data-layer="osm" class="layer-btn active">Carte OSM</button>
         <button type="button" data-layer="voyager" class="layer-btn">Carte Claire</button>
         <button type="button" data-layer="cyclosm" class="layer-btn">CyclOSM</button>
@@ -4198,6 +4203,23 @@
     });
 
     // Recherche directe d'une véloroute (V52, EV6, etc.)
+    const mobilePanelOpenBtn = document.getElementById('btn-mobile-panel-open');
+    const mobilePanelCloseBtn = document.getElementById('btn-mobile-panel-close');
+    const closeMobilePanel = () => {
+      document.body.classList.remove('mobile-sidebar-open');
+      mobilePanelOpenBtn.setAttribute('aria-expanded', 'false');
+      setTimeout(() => map.invalidateSize({ pan: false }), 200);
+    };
+    mobilePanelOpenBtn.addEventListener('click', () => {
+      document.body.classList.add('mobile-sidebar-open');
+      mobilePanelOpenBtn.setAttribute('aria-expanded', 'true');
+      setTimeout(() => map.invalidateSize({ pan: false }), 200);
+    });
+    mobilePanelCloseBtn.addEventListener('click', closeMobilePanel);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeMobilePanel();
+    });
+
     const refInputEl = document.getElementById('ref-search-input');
     const refBtnEl = document.getElementById('btn-find-ref-route');
     refBtnEl.addEventListener('click', () => searchAndTraceAnyEuropeanRoute(refInputEl.value));
