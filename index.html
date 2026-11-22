@@ -479,14 +479,6 @@
             Recherche des tracés autour du lieu...
           </div>
         </div>
-        <div class="chip-wrap">
-          <button type="button" data-quick="48.5734,7.7521,Strasbourg (EV5 / EV15)" class="quick-place btn btn-soft" style="padding:4px 9px;font-size:11px;">Strasbourg</button>
-          <button type="button" data-quick="47.3948,0.6848,Tours (Loire à Vélo EV6)" class="quick-place btn btn-soft" style="padding:4px 9px;font-size:11px;">Tours (EV6)</button>
-          <button type="button" data-quick="48.9575,2.8885,Meaux (V52 / Canal de l'Ourcq)" class="quick-place btn btn-soft" style="padding:4px 9px;font-size:11px;">Meaux (V52)</button>
-          <button type="button" data-quick="51.0543,3.7174,Gand (Belgique)" class="quick-place btn btn-soft" style="padding:4px 9px;font-size:11px;">Gand (BE)</button>
-          <button type="button" data-quick="48.2082,16.3738,Vienne (Danube EV6)" class="quick-place btn btn-soft" style="padding:4px 9px;font-size:11px;">Vienne (AT)</button>
-          <button type="button" data-quick="47.5596,7.5886,Bâle (Rhin EV15)" class="quick-place btn btn-soft" style="padding:4px 9px;font-size:11px;">Bâle (CH)</button>
-        </div>
       </div>
 
       <div id="route-entry-panel" class="sidebar-section" style="display:flex;flex-direction:column;gap:7px;border-color:#bfdbfe;background:#eff6ff;">
@@ -715,7 +707,7 @@
     <main id="map-container">
       <div class="floating-bar">
         <button id="btn-mobile-panel-open" class="mobile-panel-toggle btn btn-outline" type="button" aria-controls="sidebar" aria-expanded="false">Parcours</button>
-        <button type="button" data-layer="osm" class="layer-btn active">Carte OSM</button>
+        <button type="button" data-layer="osm" class="layer-btn active">Carte routière</button>
         <button type="button" data-layer="voyager" class="layer-btn">Carte Claire</button>
         <button type="button" data-layer="cyclosm" class="layer-btn">CyclOSM</button>
         <button type="button" data-layer="ign" class="layer-btn">IGN France</button>
@@ -948,16 +940,14 @@
     const ESRI_LIGHT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
     const ESRI_IMAGERY_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
     const IGN_PLAN_URL = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
-    const OSM_STANDARD_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
     const layers = {
       osm: makeSafeTileLayer(
-        OSM_STANDARD_URL,
+        ESRI_STREET_URL,
         {
           maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors'
+          attribution: '&copy; Esri, OpenStreetMap contributors'
         },
-        [ESRI_STREET_URL]
+        [IGN_PLAN_URL]
       ),
       voyager: makeSafeTileLayer(
         ESRI_LIGHT_URL,
