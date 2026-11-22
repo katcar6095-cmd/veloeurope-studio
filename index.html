@@ -438,7 +438,7 @@
       <div id="app-header" class="row-between" style="border-bottom: 1px solid #f1f5f9; padding-bottom: 12px;">
         <div>
           <div class="row-gap">
-            <img src="./LOGO%20LOLO.jpg" alt="Logo VeloEurope" style="width:68px;height:74px;object-fit:contain;flex:0 0 auto;" />
+            <img src="./LOGO%20LOLO.jpg" alt="Logo VeloEurope" style="width:84px;height:90px;object-fit:contain;flex:0 0 auto;" />
             <h1 style="margin:0;font-size:18px;font-weight:700;">VeloEurope Studio</h1>
           </div>
           <div class="muted-xs" style="margin-top:3px;">Réseau EuroVelo, Véloroutes Nationales, Voies Vertes &amp; GPS</div>
@@ -550,9 +550,8 @@
             Vert : voie cyclable · Bleu : piste cyclable · Violet : itinéraire vélo · Le point orange montre l’accrochage.
           </div>
         </div>
-        <div class="row-gap">
-          <button id="btn-export-gpx" type="button" class="btn btn-dark flex-1" style="padding:6px 10px;">Exporter GPX</button>
-          <button id="btn-export-euro-geojson" type="button" class="btn btn-purple flex-1" style="padding:6px 10px;">Exporter GeoJSON</button>
+        <div style="display:flex;justify-content:center;">
+          <button id="btn-export-gpx" type="button" class="btn btn-dark" style="min-width:220px;padding:8px 18px;">Exporter GPX</button>
         </div>
 
         <div class="row-gap">
@@ -1989,6 +1988,13 @@
         line.on('click', () => selectRouteAlternative(index));
         if (selected) line.bringToFront();
       });
+      const selectedRoute = routeAlternatives[selectedRouteAlternativeIndex];
+      if (selectedRoute && selectedRoute.coords.length >= 2) {
+        const bounds = L.latLngBounds(selectedRoute.coords);
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+        }
+      }
     }
 
     async function selectRouteAlternative(index) {
@@ -4606,20 +4612,6 @@ ${trkpts}
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = 'veloroute-europe.gpx'; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
-
-    document.getElementById('btn-export-euro-geojson').addEventListener('click', () => {
-      const features = EUROPEAN_VELOROUTES_CATALOG.map(r => ({
-        type: 'Feature',
-        properties: { id: r.id, ref: r.ref, name: r.name, network: r.network },
-        geometry: { type: 'LineString', coordinates: r.waypoints.map(p => [p[1], p[0]]) }
-      }));
-      const geojson = { type: 'FeatureCollection', features };
-      const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'catalogue-veloroutes-europe.geojson'; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
 
