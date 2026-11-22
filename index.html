@@ -494,7 +494,7 @@
 
       <div id="route-entry-panel" class="sidebar-section" style="display:flex;flex-direction:column;gap:7px;border-color:#bfdbfe;background:#eff6ff;">
         <span class="label-xs" style="color:#1d4ed8;">Itinéraire avec départ, arrivée et étapes</span>
-        <form id="route-entry-form" style="display:flex;flex-direction:column;gap:6px;">
+        <form id="route-entry-form" novalidate style="display:flex;flex-direction:column;gap:6px;">
           <label for="route-start-input" class="muted-xs">Départ</label>
           <input id="route-start-input" type="text" class="input-text" placeholder="Lieu ou adresse de départ" required />
           <div id="route-via-fields" style="display:flex;flex-direction:column;gap:5px;"></div>
@@ -4538,6 +4538,8 @@
       routePracticeDialog.close();
     });
     document.getElementById('btn-confirm-route-practice').addEventListener('click', () => {
+      routePracticeDialog.close();
+      if (!document.getElementById('route-entry-form').reportValidity()) return;
       const selectedPractice = {
         road: ['road', '100% Goudron / Voie verte'],
         gravel: ['gravel', 'Chemins & pistes Gravel'],
@@ -4546,7 +4548,6 @@
       if (selectedPractice && state.practice !== pendingRoutePractice) {
         setPractice(selectedPractice[0], selectedPractice[1]);
       }
-      routePracticeDialog.close();
       calculateEnteredRoute();
     });
 
