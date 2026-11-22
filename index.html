@@ -227,6 +227,17 @@
       border: 2px solid var(--accent);
       background: rgba(236, 253, 245, 0.85);
     }
+    .route-practice-dialog {
+      width: min(440px, calc(100vw - 32px));
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      color: var(--text);
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+    }
+    .route-practice-dialog::backdrop { background: rgba(15, 23, 42, 0.55); }
+    .route-practice-options { display: grid; gap: 8px; margin: 16px 0; }
+    .route-practice-option { width: 100%; }
     .plan-seg {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -733,6 +744,29 @@
       <div id="map"></div>
     </main>
   </div>
+
+  <dialog id="route-practice-dialog" class="route-practice-dialog" aria-labelledby="route-practice-title">
+    <h2 id="route-practice-title" style="margin:0;font-size:18px;">Quel type de pratique ?</h2>
+    <p class="muted-xs" style="margin:8px 0 0;">Choisissez votre pratique avant de calculer l’itinéraire.</p>
+    <div id="route-practice-options" class="route-practice-options">
+      <button type="button" class="practice-btn route-practice-option" data-practice="road" aria-pressed="false">
+        <div style="font-size:12px;font-weight:700;">Cyclotourisme</div>
+        <div style="font-size:10px;color:#475569;">Goudron pur</div>
+      </button>
+      <button type="button" class="practice-btn route-practice-option" data-practice="gravel" aria-pressed="false">
+        <div style="font-size:12px;font-weight:700;">Gravel</div>
+        <div style="font-size:10px;color:#475569;">Chemins &amp; pistes</div>
+      </button>
+      <button type="button" class="practice-btn route-practice-option" data-practice="vtc" aria-pressed="false">
+        <div style="font-size:12px;font-weight:700;">VTC / Balade</div>
+        <div style="font-size:10px;color:#475569;">Mixte sécurisé</div>
+      </button>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button id="btn-cancel-route-practice" type="button" class="btn btn-outline">Annuler</button>
+      <button id="btn-confirm-route-practice" type="button" class="btn btn-accent">Continuer le calcul</button>
+    </div>
+  </dialog>
 
   <script>
     // =========================================================================
@@ -4477,8 +4511,42 @@
     });
 
     document.getElementById('btn-add-route-stage').addEventListener('click', addRouteStageField);
+    const routePracticeDialog = document.getElementById('route-practice-dialog');
+    let pendingRoutePractice = state.practice;
+    const routePracticeOptions = [...document.querySelectorAll('#route-practice-options [data-practice]')];
+    const updateRoutePracticeSelection = () => {
+      routePracticeOptions.forEach(option => {
+        const selected = option.dataset.practice === pendingRoutePractice;
+        option.classList.toggle('active', selected);
+        option.setAttribute('aria-pressed', String(selected));
+      });
+    };
     document.getElementById('route-entry-form').addEventListener('submit', (event) => {
       event.preventDefault();
+      pendingRoutePractice = state.practice;
+      updateRoutePracticeSelection();
+      routePracticeDialog.showModal();
+      routePracticeOptions.find(option => option.dataset.practice === pendingRoutePractice)?.focus();
+    });
+    routePracticeOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        pendingRoutePractice = option.dataset.practice;
+        updateRoutePracticeSelection();
+      });
+    });
+    document.getElementById('btn-cancel-route-practice').addEventListener('click', () => {
+      routePracticeDialog.close();
+    });
+    document.getElementById('btn-confirm-route-practice').addEventListener('click', () => {
+      const selectedPractice = {
+        road: ['road', '100% Goudron / Voie verte'],
+        gravel: ['gravel', 'Chemins & pistes Gravel'],
+        vtc: ['vtc', 'Mixte sécurisé VTC']
+      }[pendingRoutePractice];
+      if (selectedPractice && state.practice !== pendingRoutePractice) {
+        setPractice(selectedPractice[0], selectedPractice[1]);
+      }
+      routePracticeDialog.close();
       calculateEnteredRoute();
     });
 
