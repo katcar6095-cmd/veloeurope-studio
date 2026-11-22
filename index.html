@@ -1807,6 +1807,20 @@
       const signatures = new Set();
       const addIfUnique = route => {
         if (!route || !Array.isArray(route.coords) || route.coords.length < 2) return;
+        if (Array.isArray(coordsLatLng) && coordsLatLng.length >= 2) {
+          const routePointCount = route.coords.length;
+          const routeSamples = new Set([0, routePointCount - 1]);
+          for (let index = 1; index < 10; index++) {
+            routeSamples.add(Math.round(index * (routePointCount - 1) / 10));
+          }
+          for (const routeIndex of routeSamples) {
+            const routePoint = route.coords[routeIndex];
+            const distanceToCorridor = Math.min(...coordsLatLng.map(waypoint =>
+              haversineMeters(routePoint, waypoint)
+            ));
+            if (distanceToCorridor > 60000) return;
+          }
+        }
         const sampleCount = Math.min(40, route.coords.length);
         const signature = Array.from({ length: sampleCount }, (_, index) => {
           const pointIndex = Math.round(index * (route.coords.length - 1) / (sampleCount - 1));
@@ -1823,11 +1837,10 @@
         fetchOsrmBikeAlternatives(coordsLatLng)
       ]);
       addIfUnique(primaryRoute);
-      osrmCandidates.forEach(addIfUnique);
-
-      for (let index = 1; index <= 2 && uniqueRoutes.length < ROUTE_ALTERNATIVE_COUNT; index++) {
+      for (let index = 1; index <= 2; index++) {
         addIfUnique(await fetchOsrmRoute(coordsLatLng, 'bike', index, false));
       }
+      osrmCandidates.forEach(addIfUnique);
       const selectedProfile = {
         road: 'fastbike',
         gravel: 'gravel',
