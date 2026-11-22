@@ -337,6 +337,20 @@
       margin-top: 2px;
       box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
     }
+    #route-download-progress {
+      height: 5px;
+      margin-top: 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18);
+      overflow: hidden;
+    }
+    #route-download-progress-bar {
+      height: 100%;
+      width: 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #34d399, #60a5fa);
+      transition: width 180ms ease;
+    }
     .floating-bar {
       max-width: calc(100% - 24px);
     }
@@ -710,7 +724,10 @@
       </div>
 
       <div id="status-banner" class="muted-xs" style="background:#0f172a;color:#f8fafc;border-radius:12px;padding:10px 12px;font-weight:500;">
-        CyclOSM actif : pistes bleues, voies vertes et EuroVelo facilement repérables.
+        <div id="status-banner-text">CyclOSM actif : pistes bleues, voies vertes et EuroVelo facilement repérables.</div>
+        <div id="route-download-progress" class="hidden" role="progressbar" aria-label="Téléchargement des parcours" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="route-download-progress-bar"></div>
+        </div>
       </div>
     </aside>
 
@@ -1054,7 +1071,19 @@
 
     function setStatus(msg) {
       const el = document.getElementById('status-banner');
-      if (el) el.textContent = msg;
+      const textEl = document.getElementById('status-banner-text');
+      if (textEl) textEl.textContent = msg;
+      else if (el) el.textContent = msg;
+    }
+
+    function setRouteDownloadProgress(percent, active = true) {
+      const progress = document.getElementById('route-download-progress');
+      const bar = document.getElementById('route-download-progress-bar');
+      if (!progress || !bar) return;
+      const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+      progress.classList.toggle('hidden', !active);
+      progress.setAttribute('aria-valuenow', String(safePercent));
+      bar.style.width = `${safePercent}%`;
     }
 
     function pushHistorySnapshot() {
@@ -1255,8 +1284,10 @@
         dashArray: '7, 7'
       }).addTo(routeLayerGroup);
       setStatus(`Calcul du parcours vélo entre ${pts.length} points...`);
+      setRouteDownloadProgress(18, true);
       const routed = await fetchOsrmRoute(rawLatLngs, 'bike');
       if (requestId !== customDrawRequestId || state.planMode !== 'draw') return;
+      setRouteDownloadProgress(routed ? 100 : 80, true);
       const finalCoords = (routed && routed.coords && routed.coords.length >= 2) ? routed.coords : rawLatLngs;
       const distM = (routed && routed.distanceMeters) ? routed.distanceMeters : 0;
 
@@ -1268,6 +1299,7 @@
       setStatus(routed
         ? `Parcours vélo calculé : ${(enriched.distanceMeters / 1000).toFixed(1)} km, ${formatDplus(enriched)} (${routingResultDescription(routed)}).`
         : `Routage vélo indisponible : tracé direct provisoire de ${(enriched.distanceMeters / 1000).toFixed(1)} km. ${formatDplus(enriched)}.`);
+      window.setTimeout(() => setRouteDownloadProgress(0, false), 700);
     }
 
     function haversineMeters(a, b) {
@@ -1378,7 +1410,7 @@
       const query = new URLSearchParams({
         overview: 'full',
         geometries: 'geojson',
-        alternatives: '3'
+        alternatives: '5'
       });
       try {
         const response = await fetchWithTimeout(
@@ -1802,25 +1834,48 @@
       };
     }
 
-    async function fetchOsrmRouteAlternatives(coordsLatLng) {
+    async function fetchOsrmRouteAlternatives(coordsLatLng, onProgress = null) {
       const uniqueRoutes = [];
       const signatures = new Set();
+      const updateProgress = percent => {
+        if (typeof onProgress === 'function') onProgress(percent);
+      };
+      const isSaneEuropeanRoute = route => {
+        if (!route || !Array.isArray(route.coords) || route.coords.length < 2) return false;
+        if (!coordsLatLng || coordsLatLng.length < 2) return false;
+        for (const point of route.coords) {
+          if (!Array.isArray(point) || point.length < 2) return false;
+          const [lat, lng] = point;
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+          if (lat < 34 || lat > 72 || lng < -25 || lng > 42) return false;
+        }
+
+        const start = [coordsLatLng[0][0], coordsLatLng[0][1]];
+        const end = [coordsLatLng[coordsLatLng.length - 1][0], coordsLatLng[coordsLatLng.length - 1][1]];
+        const startDeviation = haversineMeters(route.coords[0], start);
+        const endDeviation = haversineMeters(route.coords[route.coords.length - 1], end);
+        if (startDeviation > 5000 || endDeviation > 5000) return false;
+
+        let previous = route.coords[0];
+        let longestSingleJumpMeters = 0;
+        for (let index = 1; index < route.coords.length; index++) {
+          const distance = haversineMeters(previous, route.coords[index]);
+          longestSingleJumpMeters = Math.max(longestSingleJumpMeters, distance);
+          if (distance > 30000) return false;
+          previous = route.coords[index];
+        }
+
+        const directDistance = coordsLatLng.slice(1).reduce((total, point, index) =>
+          total + haversineMeters(coordsLatLng[index], point), 0);
+        if (directDistance > 0 &&
+          route.distanceMeters > Math.max(directDistance * 4, directDistance + 750000)) {
+          return false;
+        }
+        return longestSingleJumpMeters <= 30000;
+      };
       const addIfUnique = route => {
         if (!route || !Array.isArray(route.coords) || route.coords.length < 2) return;
-        if (Array.isArray(coordsLatLng) && coordsLatLng.length >= 2) {
-          const routePointCount = route.coords.length;
-          const routeSamples = new Set([0, routePointCount - 1]);
-          for (let index = 1; index < 10; index++) {
-            routeSamples.add(Math.round(index * (routePointCount - 1) / 10));
-          }
-          for (const routeIndex of routeSamples) {
-            const routePoint = route.coords[routeIndex];
-            const distanceToCorridor = Math.min(...coordsLatLng.map(waypoint =>
-              haversineMeters(routePoint, waypoint)
-            ));
-            if (distanceToCorridor > 60000) return;
-          }
-        }
+        if (!isSaneEuropeanRoute(route)) return;
         const sampleCount = Math.min(40, route.coords.length);
         const signature = Array.from({ length: sampleCount }, (_, index) => {
           const pointIndex = Math.round(index * (route.coords.length - 1) / (sampleCount - 1));
@@ -1836,11 +1891,14 @@
         fetchOsrmRoute(coordsLatLng, 'bike', 0, false),
         fetchOsrmBikeAlternatives(coordsLatLng)
       ]);
+      updateProgress(72);
       addIfUnique(primaryRoute);
-      for (let index = 1; index <= 2; index++) {
+      for (let index = 1; index <= 4; index++) {
         addIfUnique(await fetchOsrmRoute(coordsLatLng, 'bike', index, false));
+        updateProgress(72 + Math.round(index * 4));
       }
       osrmCandidates.forEach(addIfUnique);
+      updateProgress(92);
       const selectedProfile = {
         road: 'fastbike',
         gravel: 'gravel',
@@ -3641,11 +3699,13 @@
     async function computeWaypointsRoute() {
       if (state.waypoints.length < 2) return;
       clearRouteAlternatives();
+      setRouteDownloadProgress(8, true);
       const requestId = routeAlternativesRequestId;
       const waypoints = state.waypoints.map(point => ({ lat: point.lat, lng: point.lng }));
       let markedRoute = null;
       setStatus('Recherche d’une véloroute balisée et calcul des options...');
       try {
+        setRouteDownloadProgress(24, true);
         markedRoute = await findMarkedRouteForWaypoints(waypoints);
       } catch (error) {
         const reason = error instanceof Error ? ` (${error.message})` : '';
@@ -3664,9 +3724,13 @@
         ? markedRoute.routingWaypoints
         : waypoints.map(point => [point.lat, point.lng]);
       setStatus(`${routeGuidanceMessage} Calcul des options...`);
-      const alternatives = await fetchOsrmRouteAlternatives(routingWaypoints);
+      setRouteDownloadProgress(42, true);
+      const alternatives = await fetchOsrmRouteAlternatives(routingWaypoints, percent => {
+        setRouteDownloadProgress(percent, true);
+      });
       if (requestId !== routeAlternativesRequestId) return;
       if (!alternatives.length) {
+        setRouteDownloadProgress(0, false);
         setStatus('Aucun itinéraire calculé. Les étapes sont conservées ; vérifiez la connexion et réessayez.');
         return;
       }
@@ -3675,16 +3739,19 @@
           route.markedRoute = markedRoute;
         });
       }
+      setRouteDownloadProgress(100, true);
       routeAlternatives = alternatives;
       selectedRouteAlternativeIndex = 0;
       prepareRouteAlternativeEnrichments('Itinéraire A → B → C');
       renderRouteAlternativeOptions();
       await selectRouteAlternative(0);
+      window.setTimeout(() => setRouteDownloadProgress(0, false), 700);
     }
 
     async function computeLoopFromA() {
       if (!state.waypoints.length) return;
       clearRouteAlternatives();
+      setRouteDownloadProgress(12, true);
       const requestId = routeAlternativesRequestId;
       const start = state.waypoints[0];
       const legDist = Math.max(2.5, state.loopKm / 3.2);
@@ -3692,17 +3759,23 @@
       const p2 = offsetLatLng(start.lat, start.lng, legDist, 145);
       const p3 = offsetLatLng(start.lat, start.lng, legDist, 260);
       setStatus(`Génération d'une boucle (~${state.loopKm} km) autour de A...`);
-      const alternatives = await fetchOsrmRouteAlternatives([[start.lat, start.lng], p1, p2, p3, [start.lat, start.lng]]);
+      setRouteDownloadProgress(38, true);
+      const alternatives = await fetchOsrmRouteAlternatives([[start.lat, start.lng], p1, p2, p3, [start.lat, start.lng]], percent => {
+        setRouteDownloadProgress(percent, true);
+      });
       if (requestId !== routeAlternativesRequestId) return;
       if (!alternatives.length) {
+        setRouteDownloadProgress(0, false);
         setStatus('Impossible de calculer la boucle avec le profil vélo sélectionné.');
         return;
       }
+      setRouteDownloadProgress(100, true);
       routeAlternatives = alternatives;
       selectedRouteAlternativeIndex = 0;
       prepareRouteAlternativeEnrichments('Boucle cyclable');
       renderRouteAlternativeOptions();
       await selectRouteAlternative(0);
+      window.setTimeout(() => setRouteDownloadProgress(0, false), 700);
     }
 
     async function recomputeCurrentMode() {
