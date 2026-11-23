@@ -1403,10 +1403,16 @@
               profile: brouterProfile,
               alternativeIndex
             },
-            ...(alternativeIndex === 0 && includeFallback ? [{
-              url: `https://routing.openstreetmap.de/routed-bike/route/v1/driving/${coordStr}?overview=full&geometries=geojson`,
-              provider: 'osrm-bike-fallback'
-            }] : [])
+            ...(alternativeIndex === 0 && includeFallback ? [
+              {
+                url: `https://routing.openstreetmap.de/routed-bike/route/v1/driving/${coordStr}?overview=full&geometries=geojson`,
+                provider: 'osrm-bike-fallback'
+              },
+              {
+                url: `https://router.project-osrm.org/route/v1/cycling/${coordStr}?overview=full&geometries=geojson`,
+                provider: 'osrm-bike-fallback'
+              }
+            ] : [])
           ]
         : [{
             url: `https://router.project-osrm.org/route/v1/${profile}/${coordStr}?overview=full&geometries=geojson`,
@@ -1414,7 +1420,7 @@
           }];
       for (const request of requests) {
         try {
-          const res = await fetchWithTimeout(request.url, {}, coordsLatLng.length > 20 ? 12000 : 6000);
+          const res = await fetchWithTimeout(request.url, {}, coordsLatLng.length > 20 ? 12000 : 5000);
           if (!res.ok) continue;
           const json = await res.json();
           if (request.provider === 'brouter') {
@@ -1939,16 +1945,15 @@
         uniqueRoutes.push(route);
       };
 
-      const [primaryRoute, osrmCandidates] = await Promise.all([
-        fetchOsrmRoute(coordsLatLng, 'bike', 0, false),
+      const [primaryRoute, alt1, alt2, alt3, osrmCandidates] = await Promise.all([
+        fetchOsrmRoute(coordsLatLng, 'bike', 0, true),
+        fetchOsrmRoute(coordsLatLng, 'bike', 1, false),
+        fetchOsrmRoute(coordsLatLng, 'bike', 2, false),
+        fetchOsrmRoute(coordsLatLng, 'bike', 3, false),
         fetchOsrmBikeAlternatives(coordsLatLng)
       ]);
-      updateProgress(72);
-      addIfUnique(primaryRoute);
-      for (let index = 1; index <= 4; index++) {
-        addIfUnique(await fetchOsrmRoute(coordsLatLng, 'bike', index, false));
-        updateProgress(72 + Math.round(index * 4));
-      }
+      updateProgress(84);
+      [primaryRoute, alt1, alt2, alt3].forEach(addIfUnique);
       osrmCandidates.forEach(addIfUnique);
       updateProgress(92);
       const selectedProfile = {
@@ -3836,11 +3841,12 @@
       if (!state.waypoints.length) {
         clearRouteAlternatives();
         updateStatsUI(null);
-        setStatus('Mode Boucle auto : cliquez d’abord sur la carte pour placer votre point de départ A, puis choisissez NORD, EST, OUEST ou SUD.');
+        setStatus('Mode Boucle auto : cliquez sur la carte pour placer le point de départ A, puis choisissez NORD, EST, OUEST ou SUD.');
         return;
       }
       clearRouteAlternatives();
-      setRouteDownloadProgress(12, true);
+      routeLayerGroup.clearLayers();
+      setRouteDownloadProgress(15, true);
       const requestId = routeAlternativesRequestId;
       const start = state.waypoints[0];
       const dirCfg = LOOP_DIRECTIONS[state.loopDirection] || LOOP_DIRECTIONS.N;
@@ -3850,11 +3856,23 @@
         vtc: 'VTC / Balade (voies vertes, pistes & routes calmes)'
       }[state.practice] || 'VTC / Balade';
 
+      const loopCoords = buildLoopWaypoints(start, state.loopKm, state.loopDirection);
+      // Aperçu immédiat de la zone de boucle sur la carte pendant le calcul
+      L.polyline(loopCoords, {
+        color: '#059669',
+        weight: 4,
+        opacity: 0.55,
+        dashArray: '8, 8'
+      }).addTo(routeLayerGroup);
+      const previewBounds = L.latLngBounds(loopCoords);
+      if (previewBounds.isValid()) {
+        map.fitBounds(previewBounds, { padding: [45, 45], maxZoom: 13 });
+      }
+
       routeGuidanceMessage = `Boucle ${dirCfg.label} (~${state.loopKm} km) · ${practiceLabel} · privilégie pistes cyclables, voies vertes et axes à faible trafic automobile.`;
       setStatus(`Calcul de la boucle ${dirCfg.label} (~${state.loopKm} km) en ${practiceLabel}...`);
-      setRouteDownloadProgress(38, true);
+      setRouteDownloadProgress(40, true);
 
-      const loopCoords = buildLoopWaypoints(start, state.loopKm, state.loopDirection);
       let alternatives = await fetchOsrmRouteAlternatives(loopCoords, percent => {
         setRouteDownloadProgress(percent, true);
       });
@@ -3869,8 +3887,9 @@
 
       if (requestId !== routeAlternativesRequestId) return;
       if (!alternatives.length) {
+        routeLayerGroup.clearLayers();
         setRouteDownloadProgress(0, false);
-        setStatus(`Impossible de calculer la boucle ${dirCfg.label} autour de ce point. Essayez un autre point de départ ou une autre distance.`);
+        setStatus(`Impossible de calculer la boucle ${dirCfg.label} autour de ce point (serveur vélo indisponible ou zone sans route). Essayez un autre point de départ ou une autre distance.`);
         return;
       }
       setRouteDownloadProgress(100, true);
@@ -3883,26 +3902,23 @@
     }
 
     async function recomputeCurrentMode() {
-      if (state.isBusy) return;
-      state.isBusy = true;
-      try {
-        if (!state.waypoints.length) {
-          clearRouteAlternatives();
-          routeLayerGroup.clearLayers();
-          circuitsLayerGroup.clearLayers();
-          return;
-        }
-        const first = state.waypoints[0];
-        await discoverLocalCircuits(first.lat, first.lng, state.radiusKm);
-        if (state.planMode === 'abc' && state.waypoints.length >= 2) {
-          await computeWaypointsRoute();
-        } else if (state.planMode === 'loop') {
+      if (!state.waypoints.length) {
+        clearRouteAlternatives();
+        routeLayerGroup.clearLayers();
+        circuitsLayerGroup.clearLayers();
+        if (state.planMode === 'loop') {
           await computeLoopFromA();
-        } else {
-          clearRouteAlternatives();
         }
-      } finally {
-        state.isBusy = false;
+        return;
+      }
+      const first = state.waypoints[0];
+      discoverLocalCircuits(first.lat, first.lng, state.radiusKm);
+      if (state.planMode === 'abc' && state.waypoints.length >= 2) {
+        await computeWaypointsRoute();
+      } else if (state.planMode === 'loop') {
+        await computeLoopFromA();
+      } else {
+        clearRouteAlternatives();
       }
     }
 
@@ -4666,9 +4682,7 @@
         recomputeCurrentMode();
       }
     });
-    document.getElementById('loop-km-slider').addEventListener('change', () => {
-      if (state.planMode === 'loop') recomputeCurrentMode();
-    });
+
 
     document.getElementById('radius-slider').addEventListener('change', searchNearbyCycleways);
 
