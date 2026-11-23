@@ -1173,6 +1173,7 @@
       } else {
         clearRouteAlternatives();
         routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
         activeVelorouteGroup.clearLayers();
         circuitsLayerGroup.clearLayers();
         updateStatsUI(null);
@@ -1199,6 +1200,7 @@
       localCircuitRequestId++;
 
       routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
       activeVelorouteGroup.clearLayers();
       circuitsLayerGroup.clearLayers();
       greenwaysLayerGroup.clearLayers();
@@ -1258,6 +1260,7 @@
       clearRouteAlternatives();
       waypointsLayerGroup.clearLayers();
       routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
       const pts = state.customDrawPoints;
       if (!pts.length) {
         updateStatsUI(null);
@@ -1339,7 +1342,8 @@
       const distM = (routed && routed.distanceMeters) ? routed.distanceMeters : 0;
 
       routeLayerGroup.clearLayers();
-      L.polyline(finalCoords, { color: '#059669', weight: 6, opacity: 0.95 }).addTo(routeLayerGroup);
+      editableRouteHandlesGroup.clearLayers();
+      L.polyline(finalCoords, { color: '#ea580c', weight: 6, opacity: 0.95 }).addTo(routeLayerGroup);
       const enriched = await enrichRouteData(finalCoords, distM || straightDistance, 'Parcours tracé à la main');
       if (requestId !== customDrawRequestId || state.planMode !== 'draw') return;
       updateStatsUI(enriched);
@@ -1456,6 +1460,90 @@
       return pts;
     }
 
+    function bearingBetween(a, b) {
+      const toRad = d => d * Math.PI / 180;
+      const lat1 = toRad(a[0]), lat2 = toRad(b[0]);
+      const dLon = toRad(b[1] - a[1]);
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function angleDiffDeg(a, b) {
+      return Math.abs((a - b + 540) % 360 - 180);
+    }
+
+    function detectOffRoadShortcutSegments(pts) {
+      if (!Array.isArray(pts) || pts.length < 4) return [];
+      const suspiciousRanges = [];
+      let i = 0;
+      while (i < pts.length - 2) {
+        let foundRange = null;
+        for (let k = i + 2; k <= Math.min(pts.length - 1, i + 6); k++) {
+          let spanLen = 0;
+          for (let m = i + 1; m <= k; m++) spanLen += haversineMeters(pts[m - 1], pts[m]);
+          const directDist = haversineMeters(pts[i], pts[k]);
+          if (spanLen > 850 && directDist > 800 && (directDist / spanLen) > 0.994) {
+            const bBefore = i > 0 ? bearingBetween(pts[i - 1], pts[i]) : null;
+            const bChord = bearingBetween(pts[i], pts[k]);
+            const bAfter = (k + 1 < pts.length) ? bearingBetween(pts[k], pts[k + 1]) : null;
+            const turnIn = bBefore !== null ? angleDiffDeg(bBefore, bChord) : 0;
+            const turnOut = bAfter !== null ? angleDiffDeg(bChord, bAfter) : 0;
+            if (turnIn >= 38 || turnOut >= 38) {
+              foundRange = { startIdx: i, endIdx: k, spanLen };
+              break;
+            }
+          }
+        }
+        if (foundRange) {
+          suspiciousRanges.push(foundRange);
+          i = foundRange.endIdx;
+        } else {
+          i++;
+        }
+      }
+      return suspiciousRanges;
+    }
+
+    async function sanitizeAndRepairOffRoadShortcuts(coordsLatLng) {
+      let pts = pruneRouteSpikesAndUTurns(coordsLatLng);
+      if (!Array.isArray(pts) || pts.length < 4) return pts;
+
+      const ranges = detectOffRoadShortcutSegments(pts).slice(0, 4);
+      if (!ranges.length) return pts;
+
+      let result = pts.slice();
+      let offsetShift = 0;
+
+      for (const r of ranges) {
+        const sIdx = Math.max(0, r.startIdx + offsetShift);
+        const eIdx = Math.min(result.length - 1, r.endIdx + offsetShift);
+        if (eIdx - sIdx < 2) continue;
+
+        const pStart = result[sIdx];
+        const pEnd = result[eIdx];
+        const midLat = (pStart[0] + pEnd[0]) / 2;
+        const midLng = (pStart[1] + pEnd[1]) / 2;
+
+        try {
+          const patched = await fetchOsrmRoute([pStart, [midLat, midLng], pEnd], 'bike', 0, true);
+          if (patched && Array.isArray(patched.coords) && patched.coords.length >= 3) {
+            const patchedClean = pruneRouteSpikesAndUTurns(patched.coords);
+            const patchedLen = computeCoordsDistanceMeters(patchedClean);
+            const chord = haversineMeters(pStart, pEnd);
+            if (patchedClean.length >= 3 && patchedLen > 0 && patchedLen <= Math.max(chord * 2.2, chord + 2500)) {
+              const before = result.slice(0, sIdx);
+              const after = result.slice(eIdx + 1);
+              result = [...before, ...patchedClean, ...after];
+              offsetShift += (patchedClean.length - (eIdx - sIdx + 1));
+            }
+          }
+        } catch (_) {}
+      }
+
+      return pruneRouteSpikesAndUTurns(result);
+    }
+
     function computeCoordsDistanceMeters(coordsLatLng) {
       if (!Array.isArray(coordsLatLng) || coordsLatLng.length < 2) return 0;
       let total = 0;
@@ -1534,7 +1622,7 @@
             );
             if (!feature) continue;
             const rawCoords = feature.geometry.coordinates.map(c => [c[1], c[0]]);
-            const coords = pruneRouteSpikesAndUTurns(rawCoords);
+            const coords = await sanitizeAndRepairOffRoadShortcuts(rawCoords);
             const rawDistanceMeters = Number(feature.properties && (
               feature.properties['track-length'] || feature.properties.distance
             ) || 0);
@@ -1552,7 +1640,7 @@
           }
           if (json.code === 'Ok' && json.routes && json.routes[0] && json.routes[0].geometry) {
             const rawCoords = json.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-            const coords = pruneRouteSpikesAndUTurns(rawCoords);
+            const coords = await sanitizeAndRepairOffRoadShortcuts(rawCoords);
             const distanceMeters = coords.length !== rawCoords.length
               ? computeCoordsDistanceMeters(coords)
               : Number(json.routes[0].distance || 0);
@@ -1588,11 +1676,11 @@
         if (!response.ok) return [];
         const json = await response.json();
         if (json.code !== 'Ok' || !Array.isArray(json.routes)) return [];
-        return json.routes
-          .filter(route => route.geometry && Array.isArray(route.geometry.coordinates))
-          .map((route, index) => {
+        const rawCandidates = json.routes
+          .filter(route => route.geometry && Array.isArray(route.geometry.coordinates));
+        return (await Promise.all(rawCandidates.map(async (route, index) => {
             const rawCoords = route.geometry.coordinates.map(point => [point[1], point[0]]);
-            const coords = pruneRouteSpikesAndUTurns(rawCoords);
+            const coords = await sanitizeAndRepairOffRoadShortcuts(rawCoords);
             const distanceMeters = coords.length !== rawCoords.length
               ? computeCoordsDistanceMeters(coords)
               : Number(route.distance || 0);
@@ -1602,7 +1690,7 @@
             durationSeconds: Number(route.duration || 0),
             provider: 'osrm-bike-fallback',
             alternativeIndex: index
-          };})
+          };})))
           .filter(route => route.coords.length >= 2);
       } catch (_) {
         return [];
@@ -2156,11 +2244,11 @@
       routeAlternatives.forEach((route, index) => {
         const button = document.createElement('button');
         const selected = index === selectedRouteAlternativeIndex;
-        const colors = ['#059669', '#0284c7', '#ea580c'];
+        const colors = ['#ea580c', '#0284c7', '#7c3aed'];
         button.type = 'button';
         button.className = 'btn btn-outline';
         button.setAttribute('aria-pressed', String(selected));
-        button.style.cssText = `display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:6px 8px;text-align:left;border-color:${selected ? '#059669' : '#cbd5e1'};background:${selected ? '#ecfdf5' : '#fff'};`;
+        button.style.cssText = `display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:6px 8px;text-align:left;border-color:${selected ? '#ea580c' : '#cbd5e1'};background:${selected ? '#fff7ed' : '#fff'};`;
 
         const titleRow = document.createElement('span');
         titleRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
@@ -2224,7 +2312,8 @@
 
     function drawRouteAlternatives() {
       routeLayerGroup.clearLayers();
-      const colors = ['#059669', '#0284c7', '#ea580c'];
+      editableRouteHandlesGroup.clearLayers();
+      const colors = ['#ea580c', '#0284c7', '#7c3aed'];
       routeAlternatives.forEach((route, index) => {
         const selected = index === selectedRouteAlternativeIndex;
         const line = L.polyline(route.coords, {
@@ -2239,10 +2328,87 @@
       });
       const selectedRoute = routeAlternatives[selectedRouteAlternativeIndex];
       if (selectedRoute && selectedRoute.coords.length >= 2) {
+        renderEditableRouteHandles(selectedRoute.coords, colors[selectedRouteAlternativeIndex % colors.length]);
         const bounds = L.latLngBounds(selectedRoute.coords);
         if (bounds.isValid()) {
           map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
         }
+      }
+    }
+
+    const editableRouteHandlesGroup = L.layerGroup().addTo(map);
+
+    function renderEditableRouteHandles(coords, color = '#ea580c') {
+      editableRouteHandlesGroup.clearLayers();
+      if (!Array.isArray(coords) || coords.length < 2) return;
+      if (state.planMode === 'draw') return;
+
+      const sampleCount = Math.min(5, coords.length);
+      for (let s = 0; s < sampleCount; s++) {
+        const idx = s === 0
+          ? 0
+          : (s === sampleCount - 1
+            ? coords.length - 1
+            : Math.round((s / (sampleCount - 1)) * (coords.length - 1)));
+        const pt = coords[idx];
+        if (!pt) continue;
+        const isEndpoint = idx === 0 || idx === coords.length - 1;
+
+        const handle = L.marker([pt[0], pt[1]], {
+          draggable: true,
+          zIndexOffset: isEndpoint ? 650 : 600,
+          icon: L.divIcon({
+            className: '',
+            html: `<div style="width:${isEndpoint ? 16 : 14}px;height:${isEndpoint ? 16 : 14}px;border-radius:999px;background:#ffffff;border:3px solid ${color};box-shadow:0 2px 6px rgba(15,23,42,0.35);cursor:grab;"></div>`,
+            iconSize: [isEndpoint ? 16 : 14, isEndpoint ? 16 : 14],
+            iconAnchor: [isEndpoint ? 8 : 7, isEndpoint ? 8 : 7]
+          })
+        }).bindTooltip(
+          isEndpoint
+            ? (idx === 0 ? 'Départ — glisser pour déplacer' : 'Arrivée — glisser pour déplacer')
+            : 'Point de tracé — glisser pour modifier le passage'
+        );
+
+        handle.on('dragend', async () => {
+          pushHistorySnapshot();
+          const newLatLng = handle.getLatLng();
+          const snap = findNearestCyclingPathPoint(newLatLng);
+          const finalPt = snap ? snap.latlng : newLatLng;
+
+          if (!Array.isArray(state.waypoints) || state.waypoints.length < 2) {
+            const startCoord = coords[0];
+            const endCoord = coords[coords.length - 1];
+            state.waypoints = [
+              { lat: idx === 0 ? finalPt.lat : startCoord[0], lng: idx === 0 ? finalPt.lng : startCoord[1], name: 'Départ A' },
+              ...(idx > 0 && idx < coords.length - 1 ? [{ lat: finalPt.lat, lng: finalPt.lng, name: 'Point ajusté' }] : []),
+              { lat: idx === coords.length - 1 ? finalPt.lat : endCoord[0], lng: idx === coords.length - 1 ? finalPt.lng : endCoord[1], name: 'Arrivée B' }
+            ];
+            state.planMode = 'abc';
+            document.querySelectorAll('.plan-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('plan-abc').classList.add('active');
+          } else if (idx === 0) {
+            state.waypoints[0] = { ...state.waypoints[0], lat: finalPt.lat, lng: finalPt.lng };
+          } else if (idx === coords.length - 1) {
+            const lastWpIdx = state.waypoints.length - 1;
+            state.waypoints[lastWpIdx] = { ...state.waypoints[lastWpIdx], lat: finalPt.lat, lng: finalPt.lng };
+          } else {
+            const insertAt = Math.min(
+              state.waypoints.length,
+              Math.max(1, Math.round((idx / (coords.length - 1)) * state.waypoints.length))
+            );
+            state.waypoints.splice(insertAt, 0, {
+              lat: finalPt.lat,
+              lng: finalPt.lng,
+              name: `Étape ${String.fromCharCode(65 + insertAt)}`
+            });
+          }
+
+          renderWaypoints();
+          await recomputeCurrentMode();
+          setStatus('Tracé ajusté manuellement et recalculé.');
+        });
+
+        handle.addTo(editableRouteHandlesGroup);
       }
     }
 
@@ -3968,6 +4134,7 @@
       }
       clearRouteAlternatives();
       routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
       setRouteDownloadProgress(15, true);
       const requestId = routeAlternativesRequestId;
       const start = state.waypoints[0];
@@ -4010,6 +4177,7 @@
       if (requestId !== routeAlternativesRequestId) return;
       if (!alternatives.length) {
         routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
         setRouteDownloadProgress(0, false);
         setStatus(`Impossible de calculer la boucle ${dirCfg.label} autour de ce point (serveur vélo indisponible ou zone sans route). Essayez un autre point de départ ou une autre distance.`);
         return;
@@ -4027,6 +4195,7 @@
       if (!state.waypoints.length) {
         clearRouteAlternatives();
         routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
         circuitsLayerGroup.clearLayers();
         if (state.planMode === 'loop') {
           await computeLoopFromA();
