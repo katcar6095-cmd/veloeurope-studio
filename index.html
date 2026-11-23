@@ -382,10 +382,6 @@
     .floating-bar {
       max-width: calc(100% - 24px);
     }
-    .route-arrow-icon {
-      background: transparent !important;
-      border: none !important;
-    }
     @media (max-width: 820px) {
       html, body { overflow: auto; }
       #app-shell {
@@ -409,8 +405,7 @@
       #sidebar {
         display: none;
       }
-      .mobile-panel-toggle,
-      .mobile-panel-close {
+      .mobile-panel-toggle {
         display: inline-flex;
       }
       .mobile-sidebar-open #sidebar {
@@ -424,6 +419,9 @@
         max-height: 100dvh;
         overflow-y: auto;
         box-shadow: 8px 0 28px rgba(15, 23, 42, 0.3);
+      }
+      .mobile-panel-close {
+        display: inline-flex;
       }
       #app-header {
         position: static;
@@ -450,6 +448,29 @@
       .floating-bar .layer-btn { flex: 1 1 calc(25% - 5px); padding: 6px 4px; }
       #toggle-waymarked { width: 100%; }
       .legend-pill { display: none; }
+    }
+    @media (max-width: 820px) and (orientation: landscape) {
+      #app-shell {
+        flex-direction: row;
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+      }
+      #sidebar {
+        display: none;
+      }
+      #map-container {
+        flex: 1 1 100%;
+        width: 100%;
+        height: 100dvh;
+        min-height: 0;
+        max-height: 100dvh;
+      }
+      #map {
+        height: 100dvh !important;
+        min-height: 0;
+        max-height: 100dvh;
+      }
     }
   </style>
 </head>
@@ -571,9 +592,8 @@
             Vert : voie cyclable · Bleu : piste cyclable · Violet : itinéraire vélo · Le point orange montre l’accrochage.
           </div>
         </div>
-        <div class="row-gap" style="justify-content:center;flex-wrap:wrap;">
-          <button id="btn-reverse-direction" type="button" class="btn btn-outline" style="padding:8px 14px;border-color:#cbd5e1;color:#0f172a;" title="Inverser le sens du parcours">⇄ Inverser le sens</button>
-          <button id="btn-export-gpx" type="button" class="btn btn-dark" style="min-width:175px;padding:8px 18px;">Exporter GPX</button>
+        <div style="display:flex;justify-content:center;">
+          <button id="btn-export-gpx" type="button" class="btn btn-dark" style="min-width:220px;padding:8px 18px;">Exporter GPX</button>
         </div>
 
         <div class="row-gap">
@@ -698,6 +718,7 @@
           <div id="route-weather-points" style="display:flex;flex-direction:column;gap:4px;"></div>
           <div class="muted-xs">Prévisions estimées le long du parcours · Open-Meteo / Copernicus</div>
         </div>
+
       </div>
 
       <!-- Fiche détaillée de la véloroute sélectionnée -->
@@ -738,6 +759,7 @@
           <button type="button" data-poi="station" class="poi-btn btn btn-outline" style="padding:4px 9px;font-size:11px;">Gares</button>
         </div>
         <div class="muted-xs">Avec un parcours actif, les lieux à moins de 500 m sont repérés et classés selon la distance depuis le départ.</div>
+        <div class="muted-xs" style="color:#92400e;">Recherche gratuite via OpenStreetMap : disponibilité non garantie selon la charge des serveurs. Une solution plus fiable peut nécessiter un service payant ou un serveur dédié.</div>
         <div id="poi-list" style="display:flex;flex-direction:column;gap:6px;max-height:170px;overflow-y:auto;font-size:12px;"></div>
       </div>
 
@@ -803,6 +825,9 @@
   </dialog>
 
   <script>
+    // =========================================================================
+    // 1. BASE DE DONNÉES INTÉGRÉE DES GRANDES VÉLOROUTES EUROPÉENNES (TOUJOURS DISPONIBLE)
+    // =========================================================================
     const EUROPEAN_VELOROUTES_CATALOG = [
       {
         id: 'V52',
@@ -947,8 +972,7 @@
       loadedRoutes: [],
       selectedRouteId: null,
       isBusy: false,
-      historyStack: [],
-      lastHighlightedVeloroute: null
+      historyStack: []
     };
     const ROUTE_ALTERNATIVE_COUNT = 3;
     const DEFAULT_AVERAGE_SPEED_KMH = 20;
@@ -976,6 +1000,7 @@
       return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
+    // Vue initiale centrée sur la France et l'Europe occidentale pour voir immédiatement tout le réseau
     const map = L.map('map', { zoomControl: true }).setView([47.6, 4.2], 6);
     map.attributionControl.addAttribution('&copy; <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> / <a href="https://spacedata.copernicus.eu/" target="_blank" rel="noopener noreferrer">Copernicus DEM GLO-90</a>');
     let streetViewTarget = null;
@@ -1009,7 +1034,10 @@
     const layers = {
       osm: makeSafeTileLayer(
         ESRI_STREET_URL,
-        { maxZoom: 19, attribution: '&copy; Esri, OpenStreetMap contributors' },
+        {
+          maxZoom: 19,
+          attribution: '&copy; Esri, OpenStreetMap contributors'
+        },
         [IGN_PLAN_URL]
       ),
       voyager: makeSafeTileLayer(
@@ -1032,6 +1060,7 @@
 
     layers.osm.addTo(map);
 
+    // CALQUE OFFICIEL WAYMARKED TRAILS CYCLING : affiche 100% des EuroVelo, V52, NCN, RCN, LCN de toute l'Europe instantanément !
     const waymarkedCyclingOverlay = L.tileLayer('https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png', {
       maxZoom: 19,
       opacity: 0.92,
@@ -1054,9 +1083,6 @@
 
     map.createPane('veloroutesPane');
     map.getPane('veloroutesPane').style.zIndex = 460;
-    map.createPane('routeArrowsPane');
-    map.getPane('routeArrowsPane').style.zIndex = 475;
-    map.getPane('routeArrowsPane').style.pointerEvents = 'none';
     map.createPane('cyclingInfrastructurePane');
     map.getPane('cyclingInfrastructurePane').style.zIndex = 480;
     map.createPane('drawSnapPane');
@@ -1069,130 +1095,11 @@
     const catalogLayerGroup = L.layerGroup({ pane: 'veloroutesPane' }).addTo(map);
     const activeVelorouteGroup = L.layerGroup({ pane: 'veloroutesPane' }).addTo(map);
     const routeLayerGroup = L.layerGroup({ pane: 'veloroutesPane' }).addTo(map);
-    const routeArrowsLayerGroup = L.layerGroup({ pane: 'routeArrowsPane' }).addTo(map);
     const circuitsLayerGroup = L.layerGroup({ pane: 'veloroutesPane' }).addTo(map);
     const searchAreaLayerGroup = L.layerGroup().addTo(map);
     const waypointsLayerGroup = L.layerGroup().addTo(map);
     const poiLayerGroup = L.layerGroup().addTo(map);
     const greenwaysLayerGroup = L.layerGroup({ pane: 'cyclingInfrastructurePane' }).addTo(map);
-
-    // =========================================================================
-    // FLÈCHES DIRECTIONNELLES SUR LES TRACÉS
-    // =========================================================================
-    function computeSegmentArrowBearing(p1, p2) {
-      const lat1 = p1[0] * Math.PI / 180;
-      const lat2 = p2[0] * Math.PI / 180;
-      const dLon = (p2[1] - p1[1]) * Math.PI / 180;
-      const y = Math.sin(dLon) * Math.cos(lat2);
-      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-    }
-
-    function addArrowsAlongCoords(coords, color = '#ea580c', opacity = 0.95, spacingPx = 115) {
-      if (!Array.isArray(coords) || coords.length < 2) return;
-      const projected = coords.map(pt => map.latLngToLayerPoint([pt[0], pt[1]]));
-      const cumPx = [0];
-      for (let i = 1; i < projected.length; i++) {
-        cumPx.push(cumPx[i - 1] + projected[i - 1].distanceTo(projected[i]));
-      }
-      const totalPx = cumPx[cumPx.length - 1];
-      if (totalPx < 45) return;
-
-      const step = Math.max(70, spacingPx);
-      const targets = [];
-      for (let dist = step * 0.65; dist <= totalPx - 20; dist += step) {
-        targets.push(dist);
-      }
-      if (!targets.length) {
-        targets.push(totalPx * 0.5);
-      }
-
-      let segIdx = 1;
-      targets.forEach(targetDist => {
-        while (segIdx < cumPx.length - 1 && cumPx[segIdx] < targetDist) {
-          segIdx++;
-        }
-        const i0 = Math.max(0, segIdx - 1);
-        const i1 = Math.min(coords.length - 1, segIdx);
-        const segLen = cumPx[i1] - cumPx[i0];
-        const ratio = segLen > 0 ? Math.max(0, Math.min(1, (targetDist - cumPx[i0]) / segLen)) : 0;
-
-        const lat = coords[i0][0] + (coords[i1][0] - coords[i0][0]) * ratio;
-        const lng = coords[i0][1] + (coords[i1][1] - coords[i0][1]) * ratio;
-
-        let aPt = coords[i0];
-        let bPt = coords[i1];
-        if (projected[i0].distanceTo(projected[i1]) < 4) {
-          for (let k = i1; k < coords.length; k++) {
-            if (projected[i0].distanceTo(projected[k]) >= 4) {
-              bPt = coords[k];
-              break;
-            }
-          }
-        }
-        const bearing = computeSegmentArrowBearing(aPt, bPt);
-
-        const arrowMarker = L.marker([lat, lng], {
-          pane: 'routeArrowsPane',
-          interactive: false,
-          zIndexOffset: 520,
-          icon: L.divIcon({
-            className: 'route-arrow-icon',
-            html: `<div style="
-              width:20px;height:20px;
-              display:flex;align-items:center;justify-content:center;
-              transform:rotate(${bearing.toFixed(1)}deg);
-              opacity:${opacity};
-              filter:drop-shadow(0 0 1.5px #ffffff) drop-shadow(0 1px 2px rgba(15,23,42,0.45));
-            ">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M7 1.5L12 11.5L7 8.8L2 11.5L7 1.5Z" fill="${color}" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
-              </svg>
-            </div>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-          })
-        });
-        arrowMarker.addTo(routeArrowsLayerGroup);
-      });
-    }
-
-    function refreshAllRouteArrows() {
-      routeArrowsLayerGroup.clearLayers();
-
-      if (routeAlternatives.length > 0 && selectedRouteAlternativeIndex >= 0) {
-        const colors = ['#ea580c', '#0284c7', '#7c3aed'];
-        routeAlternatives.forEach((route, index) => {
-          const selected = index === selectedRouteAlternativeIndex;
-          if (route && Array.isArray(route.coords) && route.coords.length >= 2) {
-            addArrowsAlongCoords(
-              route.coords,
-              colors[index % colors.length],
-              selected ? 0.98 : 0.45,
-              selected ? 110 : 165
-            );
-          }
-        });
-      } else if (state.activeRouteCoords && state.activeRouteCoords.length >= 2) {
-        const activeColor = state.lastHighlightedVeloroute
-          ? (state.lastHighlightedVeloroute.color || '#7c3aed')
-          : '#ea580c';
-        addArrowsAlongCoords(
-          state.activeRouteCoords.map(p => [p.lat, p.lng]),
-          activeColor,
-          0.98,
-          110
-        );
-      }
-
-      if (state.lastHighlightedVeloroute && Array.isArray(state.lastHighlightedVeloroute.segments)) {
-        state.lastHighlightedVeloroute.segments.forEach(seg => {
-          if (Array.isArray(seg) && seg.length >= 2) {
-            addArrowsAlongCoords(seg, state.lastHighlightedVeloroute.color || '#7c3aed', 0.96, 125);
-          }
-        });
-      }
-    }
 
     const dplusMarker = L.circleMarker([48.5734, 7.7521], {
       pane: 'dplusCursorPane',
@@ -1226,10 +1133,7 @@
         loopDirection: state.loopDirection,
         waypoints: JSON.parse(JSON.stringify(state.waypoints)),
         customDrawPoints: JSON.parse(JSON.stringify(state.customDrawPoints)),
-        selectedRouteId: state.selectedRouteId,
-        lastHighlightedVeloroute: state.lastHighlightedVeloroute
-          ? JSON.parse(JSON.stringify(state.lastHighlightedVeloroute))
-          : null
+        selectedRouteId: state.selectedRouteId
       });
       if (state.historyStack.length > 40) {
         state.historyStack.shift();
@@ -1245,7 +1149,6 @@
       state.waypoints = prev.waypoints || [];
       state.customDrawPoints = prev.customDrawPoints || [];
       state.selectedRouteId = prev.selectedRouteId || null;
-      state.lastHighlightedVeloroute = prev.lastHighlightedVeloroute || null;
 
       if (prev.loopDirection) {
         setLoopDirectionUI(prev.loopDirection);
@@ -1267,20 +1170,14 @@
         await updateCustomDrawnRoute();
       } else if (state.waypoints.length > 0) {
         await recomputeCurrentMode();
-      } else if (state.lastHighlightedVeloroute && state.lastHighlightedVeloroute.segments) {
-        const lh = state.lastHighlightedVeloroute;
-        drawHighlightedVelorouteSegments(lh.segments, lh.color || '#7c3aed', lh.name, lh.meta, false);
-        await openVelorouteSheet(lh.meta);
       } else {
         clearRouteAlternatives();
         routeLayerGroup.clearLayers();
-        routeArrowsLayerGroup.clearLayers();
-        editableRouteHandlesGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
         activeVelorouteGroup.clearLayers();
         circuitsLayerGroup.clearLayers();
         updateStatsUI(null);
       }
-      refreshAllRouteArrows();
       setStatus(`Action annulée (${state.historyStack.length} étape(s) restante(s) dans l'historique).`);
     }
 
@@ -1289,7 +1186,6 @@
       state.waypoints = [];
       state.customDrawPoints = [];
       state.activeRouteCoords = [];
-      state.lastHighlightedVeloroute = null;
       state.circuits = [];
       state.selectedCircuitIdx = -1;
       state.activePoiCategory = null;
@@ -1304,13 +1200,13 @@
       localCircuitRequestId++;
 
       routeLayerGroup.clearLayers();
-      routeArrowsLayerGroup.clearLayers();
       editableRouteHandlesGroup.clearLayers();
       activeVelorouteGroup.clearLayers();
       circuitsLayerGroup.clearLayers();
       greenwaysLayerGroup.clearLayers();
       greenwaysSnapSegments = [];
       projectedGreenwaysSnapSegments = [];
+      greenwaysLoaded = false;
       greenwaysLoaded = true;
       if (drawSnapMarker) {
         map.removeLayer(drawSnapMarker);
@@ -1358,124 +1254,12 @@
       setStatus('Réinitialisation complète effectuée. Prêt pour un nouveau tracé.');
     }
 
-    // =========================================================================
-    // INVERSION DU SENS DU PARCOURS
-    // =========================================================================
-    function reverseWaypointLabels(waypoints) {
-      return waypoints.map((wp, idx) => {
-        const letter = String.fromCharCode(65 + idx);
-        const oldName = wp.name || '';
-        const cleaned = oldName.replace(/^Point [A-Z]\b/i, '').replace(/^Étape \d+\b/i, '').trim();
-        return {
-          ...wp,
-          name: cleaned ? `${cleaned} (${letter})` : `Point ${letter}`
-        };
-      });
-    }
-
-    async function reverseCurrentRouteDirection() {
-      const hasWaypoints = Array.isArray(state.waypoints) && state.waypoints.length >= 2;
-      const hasDrawPoints = state.planMode === 'draw' && Array.isArray(state.customDrawPoints) && state.customDrawPoints.length >= 2;
-      const hasAlternatives = Array.isArray(routeAlternatives) && routeAlternatives.length > 0;
-      const hasHighlighted = Boolean(
-        state.lastHighlightedVeloroute &&
-        Array.isArray(state.lastHighlightedVeloroute.segments) &&
-        state.lastHighlightedVeloroute.segments.length > 0
-      );
-      const hasActiveCoords = Array.isArray(state.activeRouteCoords) && state.activeRouteCoords.length >= 2;
-
-      if (!hasWaypoints && !hasDrawPoints && !hasAlternatives && !hasHighlighted && !hasActiveCoords) {
-        setStatus('Aucun tracé actif à inverser. Tracez ou sélectionnez d’abord un parcours.');
-        return;
-      }
-
-      pushHistorySnapshot();
-
-      if (hasDrawPoints) {
-        state.customDrawPoints = [...state.customDrawPoints].reverse();
-        await updateCustomDrawnRoute();
-        refreshAllRouteArrows();
-        setStatus('Sens du parcours tracé inversé.');
-        return;
-      }
-
-      if (hasAlternatives) {
-        routeAlternatives = routeAlternatives.map(alt => ({
-          ...alt,
-          coords: Array.isArray(alt.coords) ? [...alt.coords].reverse() : alt.coords,
-          enriched: null,
-          enrichmentPromise: null,
-          enrichmentFailed: false
-        }));
-        if (hasWaypoints) {
-          state.waypoints = reverseWaypointLabels([...state.waypoints].reverse());
-          renderWaypoints();
-        }
-        renderRouteAlternativeOptions();
-        await selectRouteAlternative(Math.max(0, selectedRouteAlternativeIndex));
-        refreshAllRouteArrows();
-        setStatus('Sens de l’itinéraire inversé (départ et arrivée échangés).');
-        return;
-      }
-
-      if (hasWaypoints) {
-        state.waypoints = reverseWaypointLabels([...state.waypoints].reverse());
-        renderWaypoints();
-        await recomputeCurrentMode();
-        refreshAllRouteArrows();
-        setStatus('Sens des étapes inversé.');
-        return;
-      }
-
-      if (hasHighlighted) {
-        const lh = state.lastHighlightedVeloroute;
-        const reversedSegments = [...lh.segments]
-          .reverse()
-          .map(seg => Array.isArray(seg) ? [...seg].reverse() : seg);
-        const reversedCoords = reversedSegments.flat();
-        const updatedMeta = {
-          ...lh.meta,
-          coords2d: reversedCoords,
-          name: `${lh.meta.name} (sens inversé)`
-        };
-        state.lastHighlightedVeloroute = {
-          ...lh,
-          segments: reversedSegments,
-          name: updatedMeta.name,
-          meta: updatedMeta
-        };
-        drawHighlightedVelorouteSegments(reversedSegments, lh.color || '#7c3aed', updatedMeta.name, updatedMeta, false);
-        await openVelorouteSheet(updatedMeta);
-        refreshAllRouteArrows();
-        setStatus(`Sens de la véloroute inversé : ${updatedMeta.name}.`);
-        return;
-      }
-
-      if (hasActiveCoords) {
-        const revCoords2d = [...state.activeRouteCoords].reverse().map(p => [p.lat, p.lng]);
-        routeLayerGroup.clearLayers();
-        L.polyline(revCoords2d, { color: '#ea580c', weight: 6, opacity: 0.95 }).addTo(routeLayerGroup);
-        const title = state.activeRouteData && state.activeRouteData.title
-          ? `${state.activeRouteData.title} (sens inversé)`
-          : 'Parcours (sens inversé)';
-        const enriched = await enrichRouteData(
-          revCoords2d,
-          state.activeRouteData ? state.activeRouteData.distanceMeters : 0,
-          title
-        );
-        updateStatsUI(enriched);
-        refreshAllRouteArrows();
-        setStatus('Sens du parcours inversé.');
-      }
-    }
-
     let customDrawRequestId = 0;
     async function updateCustomDrawnRoute() {
       const requestId = ++customDrawRequestId;
       clearRouteAlternatives();
       waypointsLayerGroup.clearLayers();
       routeLayerGroup.clearLayers();
-      routeArrowsLayerGroup.clearLayers();
       editableRouteHandlesGroup.clearLayers();
       const pts = state.customDrawPoints;
       if (!pts.length) {
@@ -1549,7 +1333,6 @@
         opacity: 0.65,
         dashArray: '7, 7'
       }).addTo(routeLayerGroup);
-      addArrowsAlongCoords(rawLatLngs, '#059669', 0.85, 115);
       setStatus(`Calcul du parcours vélo entre ${pts.length} points...`);
       setRouteDownloadProgress(18, true);
       const routed = await fetchOsrmRoute(rawLatLngs, 'bike');
@@ -1564,7 +1347,6 @@
       const enriched = await enrichRouteData(finalCoords, distM || straightDistance, 'Parcours tracé à la main');
       if (requestId !== customDrawRequestId || state.planMode !== 'draw') return;
       updateStatsUI(enriched);
-      refreshAllRouteArrows();
       setStatus(routed
         ? `Parcours vélo calculé : ${(enriched.distanceMeters / 1000).toFixed(1)} km, ${formatDplus(enriched)} (${routingResultDescription(routed)}).`
         : `Routage vélo indisponible : tracé direct provisoire de ${(enriched.distanceMeters / 1000).toFixed(1)} km. ${formatDplus(enriched)}.`);
@@ -1587,6 +1369,7 @@
       let pts = coordsLatLng.map(p => [Number(p[0]), Number(p[1])]).filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
       if (pts.length < 3) return pts;
 
+      // 1. Dédupliquer les points consécutifs quasi-identiques (< 1.5 m)
       const deduped = [pts[0]];
       for (let i = 1; i < pts.length; i++) {
         if (haversineMeters(deduped[deduped.length - 1], pts[i]) >= 1.5) {
@@ -1596,6 +1379,12 @@
       pts = deduped;
       if (pts.length < 3) return pts;
 
+      // 2. Détecter et couper les allers-retours / impasses / demi-tours sur TOUS les parcours
+      // (A->B->C, tracé libre, boucle, véloroutes) :
+      // - Si un point j revient à proximité (< 35 m) d'un point antérieur i sur un aller-retour (jusqu'à maxSpurMeters),
+      //   on supprime l'aller-retour inutile [i+1 .. j-1].
+      // - Si un sommet forme un demi-tour brusque (angle entre vecteurs entrants/sortants <= 32°, soit >= 148° de rebroussement),
+      //   on coupe la branche aller-retour si elle n'est pas nécessaire pour atteindre la destination finale.
       const finalDest = pts[pts.length - 1];
       const isClosedLoopIntent = haversineMeters(pts[0], finalDest) <= 1500 && pts.length > 6;
 
@@ -1615,9 +1404,11 @@
           cleaned.push(pts[i]);
           let jumpTo = -1;
 
+          // Recherche d'un point de retour proche de pts[i] (aller-retour / impasse)
           for (let j = i + 2; j < pts.length; j++) {
             const loopPathLen = cum[j] - cum[i];
             if (loopPathLen > maxSpurMeters * 2.4) break;
+            // Ne jamais court-circuiter la boucle globale volontaire du départ vers l'arrivée
             if (isClosedLoopIntent && i < 2 && j >= pts.length - 3) continue;
 
             const directDist = haversineMeters(pts[i], pts[j]);
@@ -1632,6 +1423,7 @@
             continue;
           }
 
+          // Détection d'un rebroussement sec (angle <= 32° entre les deux branches partant du sommet)
           if (cleaned.length >= 2 && i < pts.length - 1) {
             const prev = cleaned[cleaned.length - 2];
             const curr = cleaned[cleaned.length - 1];
@@ -1650,6 +1442,7 @@
                 const cosAngle = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (n1 * n2)));
                 const angleDeg = Math.acos(cosAngle) * 180 / Math.PI;
                 if (angleDeg <= 32) {
+                  // Si la branche suivante rapproche nettement de la destination sans allonger inutilement
                   const distCurrToDest = haversineMeters(curr, finalDest);
                   const distNextToDest = haversineMeters(next, finalDest);
                   if (distNextToDest <= distCurrToDest + 30) {
@@ -1720,4 +1513,3657 @@
       if (!ranges.length) return pts;
 
       let result = pts.slice();
-      let
+      let offsetShift = 0;
+
+      for (const r of ranges) {
+        const sIdx = Math.max(0, r.startIdx + offsetShift);
+        const eIdx = Math.min(result.length - 1, r.endIdx + offsetShift);
+        if (eIdx - sIdx < 2) continue;
+
+        const pStart = result[sIdx];
+        const pEnd = result[eIdx];
+        const midLat = (pStart[0] + pEnd[0]) / 2;
+        const midLng = (pStart[1] + pEnd[1]) / 2;
+
+        try {
+          const patched = await fetchOsrmRoute([pStart, [midLat, midLng], pEnd], 'bike', 0, true);
+          if (patched && Array.isArray(patched.coords) && patched.coords.length >= 3) {
+            const patchedClean = pruneRouteSpikesAndUTurns(patched.coords);
+            const patchedLen = computeCoordsDistanceMeters(patchedClean);
+            const chord = haversineMeters(pStart, pEnd);
+            if (patchedClean.length >= 3 && patchedLen > 0 && patchedLen <= Math.max(chord * 2.2, chord + 2500)) {
+              const before = result.slice(0, sIdx);
+              const after = result.slice(eIdx + 1);
+              result = [...before, ...patchedClean, ...after];
+              offsetShift += (patchedClean.length - (eIdx - sIdx + 1));
+            }
+          }
+        } catch (_) {}
+      }
+
+      return pruneRouteSpikesAndUTurns(result);
+    }
+
+    function computeCoordsDistanceMeters(coordsLatLng) {
+      if (!Array.isArray(coordsLatLng) || coordsLatLng.length < 2) return 0;
+      let total = 0;
+      for (let i = 1; i < coordsLatLng.length; i++) {
+        total += haversineMeters(coordsLatLng[i - 1], coordsLatLng[i]);
+      }
+      return total;
+    }
+
+    function fetchWithTimeout(url, options = {}, timeoutMs = 8500) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+    }
+
+    async function queryOverpass(ql, forceRefresh = false) {
+      const headers = { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' };
+      for (const endpoint of OVERPASS_ENDPOINTS) {
+        try {
+          const url = forceRefresh ? `${endpoint}?t=${Date.now()}` : endpoint;
+          let res = await fetchWithTimeout(url, {
+            method: 'POST',
+            headers,
+            body: 'data=' + encodeURIComponent(ql)
+          }, 8500);
+          if (!res.ok) continue;
+          const text = await res.text();
+          if (!text || text.trim().startsWith('<')) continue;
+          const data = JSON.parse(text);
+          if (data && Array.isArray(data.elements)) return data.elements;
+        } catch (_) {}
+      }
+      return [];
+    }
+
+    async function fetchOsrmRoute(coordsLatLng, profile = 'bike', alternativeIndex = 0, includeFallback = true, profileOverride = null) {
+      if (!Array.isArray(coordsLatLng) || coordsLatLng.length < 2) return null;
+      const coordStr = coordsLatLng.map(p => `${p[1].toFixed(6)},${p[0].toFixed(6)}`).join(';');
+      const bikeCoords = coordsLatLng.map(p => `${p[1].toFixed(6)},${p[0].toFixed(6)}`).join('|');
+      const brouterProfile = profileOverride || ({
+        road: 'trekking',
+        gravel: 'gravel',
+        vtc: 'trekking'
+      }[state.practice] || 'trekking');
+      const requests = profile === 'bike'
+        ? [
+            {
+              url: `https://brouter.de/brouter?lonlats=${encodeURIComponent(bikeCoords)}&profile=${encodeURIComponent(brouterProfile)}&alternativeidx=${alternativeIndex}&format=geojson`,
+              provider: 'brouter',
+              profile: brouterProfile,
+              alternativeIndex
+            },
+            ...(alternativeIndex === 0 && includeFallback ? [
+              {
+                url: `https://routing.openstreetmap.de/routed-bike/route/v1/driving/${coordStr}?overview=full&geometries=geojson`,
+                provider: 'osrm-bike-fallback'
+              },
+              {
+                url: `https://router.project-osrm.org/route/v1/cycling/${coordStr}?overview=full&geometries=geojson`,
+                provider: 'osrm-bike-fallback'
+              }
+            ] : [])
+          ]
+        : [{
+            url: `https://router.project-osrm.org/route/v1/${profile}/${coordStr}?overview=full&geometries=geojson`,
+            provider: 'osrm'
+          }];
+      for (const request of requests) {
+        try {
+          const res = await fetchWithTimeout(request.url, {}, coordsLatLng.length > 20 ? 12000 : 5000);
+          if (!res.ok) continue;
+          const json = await res.json();
+          if (request.provider === 'brouter') {
+            const feature = json.features && json.features.find(item =>
+              item.geometry && Array.isArray(item.geometry.coordinates) && item.geometry.coordinates.length >= 2
+            );
+            if (!feature) continue;
+            const rawCoords = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+            const coords = await sanitizeAndRepairOffRoadShortcuts(rawCoords);
+            const rawDistanceMeters = Number(feature.properties && (
+              feature.properties['track-length'] || feature.properties.distance
+            ) || 0);
+            const distanceMeters = coords.length !== rawCoords.length
+              ? computeCoordsDistanceMeters(coords)
+              : rawDistanceMeters;
+            return {
+              coords,
+              distanceMeters,
+              durationSeconds: Number(feature.properties && feature.properties['total-time'] || 0),
+              provider: request.provider,
+              routingProfile: request.profile,
+              alternativeIndex: request.alternativeIndex
+            };
+          }
+          if (json.code === 'Ok' && json.routes && json.routes[0] && json.routes[0].geometry) {
+            const rawCoords = json.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+            const coords = await sanitizeAndRepairOffRoadShortcuts(rawCoords);
+            const distanceMeters = coords.length !== rawCoords.length
+              ? computeCoordsDistanceMeters(coords)
+              : Number(json.routes[0].distance || 0);
+            return {
+              coords,
+              distanceMeters,
+              durationSeconds: Number(json.routes[0].duration || 0),
+              provider: request.provider,
+              alternativeIndex
+            };
+          }
+        } catch (_) {
+          continue;
+        }
+      }
+      return null;
+    }
+
+    async function fetchOsrmBikeAlternatives(coordsLatLng) {
+      if (!Array.isArray(coordsLatLng) || coordsLatLng.length < 2) return [];
+      const coordStr = coordsLatLng.map(point => `${point[1].toFixed(6)},${point[0].toFixed(6)}`).join(';');
+      const query = new URLSearchParams({
+        overview: 'full',
+        geometries: 'geojson',
+        alternatives: '5'
+      });
+      try {
+        const response = await fetchWithTimeout(
+          `https://routing.openstreetmap.de/routed-bike/route/v1/driving/${coordStr}?${query.toString()}`,
+          {},
+          coordsLatLng.length > 20 ? 12000 : 8000
+        );
+        if (!response.ok) return [];
+        const json = await response.json();
+        if (json.code !== 'Ok' || !Array.isArray(json.routes)) return [];
+        const rawCandidates = json.routes
+          .filter(route => route.geometry && Array.isArray(route.geometry.coordinates));
+        return (await Promise.all(rawCandidates.map(async (route, index) => {
+            const rawCoords = route.geometry.coordinates.map(point => [point[1], point[0]]);
+            const coords = await sanitizeAndRepairOffRoadShortcuts(rawCoords);
+            const distanceMeters = coords.length !== rawCoords.length
+              ? computeCoordsDistanceMeters(coords)
+              : Number(route.distance || 0);
+            return {
+            coords,
+            distanceMeters,
+            durationSeconds: Number(route.duration || 0),
+            provider: 'osrm-bike-fallback',
+            alternativeIndex: index
+          };})))
+          .filter(route => route.coords.length >= 2);
+      } catch (_) {
+        return [];
+      }
+    }
+
+    const WEB_MERCATOR_RADIUS = 6378137;
+    const MAX_MARKED_ROUTE_ACCESS_METERS = 5000;
+    const MAX_MARKED_ROUTE_WAYPOINTS = 160;
+    const MAX_MARKED_ROUTE_CORRIDOR_ANCHORS = 90;
+
+    function latLngToWebMercator(point) {
+      const lat = Math.max(-85.05112878, Math.min(85.05112878, point[0]));
+      return [
+        WEB_MERCATOR_RADIUS * point[1] * Math.PI / 180,
+        WEB_MERCATOR_RADIUS * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360))
+      ];
+    }
+
+    function webMercatorToLatLng(point) {
+      return [
+        (2 * Math.atan(Math.exp(point[1] / WEB_MERCATOR_RADIUS)) - Math.PI / 2) * 180 / Math.PI,
+        point[0] / WEB_MERCATOR_RADIUS * 180 / Math.PI
+      ];
+    }
+
+    function getWebMercatorBbox(points, paddingMeters = 0) {
+      const projected = points.map(latLngToWebMercator);
+      const xs = projected.map(point => point[0]);
+      const ys = projected.map(point => point[1]);
+      return [
+        Math.min(...xs) - paddingMeters,
+        Math.min(...ys) - paddingMeters,
+        Math.max(...xs) + paddingMeters,
+        Math.max(...ys) + paddingMeters
+      ].map(value => value.toFixed(2)).join(',');
+    }
+
+    function getWaymarkedLineStrings(geometry) {
+      if (!geometry) return [];
+      if (geometry.type === 'LineString' && Array.isArray(geometry.coordinates)) {
+        return [geometry.coordinates];
+      }
+      if (geometry.type === 'MultiLineString' && Array.isArray(geometry.coordinates)) {
+        return geometry.coordinates;
+      }
+      if (geometry.type === 'GeometryCollection' && Array.isArray(geometry.geometries)) {
+        return geometry.geometries.flatMap(getWaymarkedLineStrings);
+      }
+      return [];
+    }
+
+    async function fetchWaymarkedRouteSegments(relationIds, bbox) {
+      const query = new URLSearchParams({
+        relations: relationIds.join(','),
+        bbox
+      });
+      const response = await fetchWithTimeout(
+        `https://cycling.waymarkedtrails.org/api/v1/list/segments?${query.toString()}`,
+        {},
+        10000
+      );
+      if (!response.ok) throw new Error(`Waymarked Trails a répondu ${response.status}.`);
+      const geojson = await response.json();
+      if (!geojson || !Array.isArray(geojson.features)) {
+        throw new Error('La géométrie des véloroutes balisées est invalide.');
+      }
+      return geojson.features;
+    }
+
+    function buildMarkedRouteGraph(features) {
+      const nodes = [];
+      const nodesByKey = new Map();
+      const featureNodes = [];
+
+      const getNodeId = point => {
+        const key = `${point[0].toFixed(5)},${point[1].toFixed(5)}`;
+        if (nodesByKey.has(key)) return nodesByKey.get(key);
+        const id = nodes.length;
+        nodesByKey.set(key, id);
+        nodes.push({ point, edges: [] });
+        return id;
+      };
+
+      features.forEach(feature => {
+        const routeId = Number(feature.id || (feature.properties && feature.properties.id));
+        const lineNodeIds = getWaymarkedLineStrings(feature.geometry).map(line => {
+          const points = line
+            .filter(point => Array.isArray(point) && point.length >= 2 && point.every(Number.isFinite))
+            .map(webMercatorToLatLng);
+          return points.map(getNodeId);
+        });
+        lineNodeIds.forEach(ids => {
+          for (let i = 1; i < ids.length; i++) {
+            const from = ids[i - 1];
+            const to = ids[i];
+            if (from === to) continue;
+            const distance = haversineMeters(nodes[from].point, nodes[to].point);
+            if (distance <= 1) continue;
+            nodes[from].edges.push({ to, distance, routeId });
+            nodes[to].edges.push({ to: from, distance, routeId });
+          }
+        });
+        featureNodes.push({
+          id: routeId,
+          nodeIds: lineNodeIds.flat()
+        });
+      });
+
+      return { nodes, featureNodes };
+    }
+
+    function findNearestMarkedRouteNode(graph, waypoint, candidateNodeIds) {
+      let nearest = null;
+      const visited = new Set();
+      candidateNodeIds.forEach(nodeId => {
+        if (visited.has(nodeId)) return;
+        visited.add(nodeId);
+        const node = graph.nodes[nodeId];
+        if (!node || !node.edges.length) return;
+        const distance = haversineMeters([waypoint.lat, waypoint.lng], node.point);
+        if (!nearest || distance < nearest.distanceMeters) {
+          nearest = { nodeId, distanceMeters: distance };
+        }
+      });
+      return nearest;
+    }
+
+    function shortestMarkedRoutePath(graph, startId, endId, routesById = null) {
+      if (startId === endId) {
+        return { points: [graph.nodes[startId].point], distanceMeters: 0, routeUsage: new Map() };
+      }
+      const distances = new Float64Array(graph.nodes.length);
+      distances.fill(Infinity);
+      const previous = new Int32Array(graph.nodes.length);
+      previous.fill(-1);
+      const previousRouteId = new Array(graph.nodes.length).fill(null);
+      const queue = [];
+
+      const push = item => {
+        queue.push(item);
+        let index = queue.length - 1;
+        while (index > 0) {
+          const parent = Math.floor((index - 1) / 2);
+          if (queue[parent].distance <= item.distance) break;
+          queue[index] = queue[parent];
+          index = parent;
+        }
+        queue[index] = item;
+      };
+
+      const pop = () => {
+        const first = queue[0];
+        const last = queue.pop();
+        if (queue.length) {
+          let index = 0;
+          while (true) {
+            const left = index * 2 + 1;
+            const right = left + 1;
+            if (left >= queue.length) break;
+            const child = right < queue.length && queue[right].distance < queue[left].distance
+              ? right
+              : left;
+            if (queue[child].distance >= last.distance) break;
+            queue[index] = queue[child];
+            index = child;
+          }
+          queue[index] = last;
+        }
+        return first;
+      };
+
+      distances[startId] = 0;
+      push({ nodeId: startId, distance: 0 });
+      while (queue.length) {
+        const current = pop();
+        if (current.distance !== distances[current.nodeId]) continue;
+        if (current.nodeId === endId) break;
+        graph.nodes[current.nodeId].edges.forEach(edge => {
+          const incomingRouteId = previousRouteId[current.nodeId];
+          const changesMarkedRoute = incomingRouteId !== null &&
+            incomingRouteId !== edge.routeId;
+          const weightedDistance = edge.distance * (changesMarkedRoute ? 1.12 : 1);
+          const distance = current.distance + weightedDistance;
+          if (distance >= distances[edge.to]) return;
+          distances[edge.to] = distance;
+          previous[edge.to] = current.nodeId;
+          previousRouteId[edge.to] = edge.routeId;
+          push({ nodeId: edge.to, distance });
+        });
+      }
+
+      if (!Number.isFinite(distances[endId])) return null;
+      const path = [];
+      for (let nodeId = endId; nodeId !== -1; nodeId = previous[nodeId]) {
+        path.push(graph.nodes[nodeId].point);
+        if (nodeId === startId) break;
+      }
+      if (path[path.length - 1] !== graph.nodes[startId].point) return null;
+      path.reverse();
+      const routeUsage = new Map();
+      for (let nodeId = endId; nodeId !== startId; nodeId = previous[nodeId]) {
+        const routeId = previousRouteId[nodeId];
+        if (routeId !== null) {
+          routeUsage.set(routeId, (routeUsage.get(routeId) || 0) +
+            haversineMeters(graph.nodes[previous[nodeId]].point, graph.nodes[nodeId].point));
+        }
+      }
+      return { points: path, distanceMeters: distances[endId], routeUsage };
+    }
+
+    function sampleMarkedRoutePath(points, maxPointCount) {
+      if (points.length < 2 || points.length <= maxPointCount) return points;
+      const cumulativeMeters = [0];
+      for (let i = 1; i < points.length; i++) {
+        cumulativeMeters.push(cumulativeMeters[i - 1] + haversineMeters(points[i - 1], points[i]));
+      }
+      const totalMeters = cumulativeMeters[cumulativeMeters.length - 1];
+      const sampled = [points[0]];
+      let segmentIndex = 1;
+      let lastSampledIndex = 0;
+      for (let sampleIndex = 1; sampleIndex < maxPointCount - 1; sampleIndex++) {
+        const targetMeters = totalMeters * sampleIndex / (maxPointCount - 1);
+        while (
+          segmentIndex < cumulativeMeters.length - 1 &&
+          cumulativeMeters[segmentIndex] < targetMeters
+        ) {
+          segmentIndex++;
+        }
+        const lowerIndex = segmentIndex - 1;
+        const nearestIndex = targetMeters - cumulativeMeters[lowerIndex] <=
+          cumulativeMeters[segmentIndex] - targetMeters
+          ? lowerIndex
+          : segmentIndex;
+        if (nearestIndex > lastSampledIndex && nearestIndex < points.length - 1) {
+          sampled.push(points[nearestIndex]);
+          lastSampledIndex = nearestIndex;
+        }
+      }
+      sampled.push(points[points.length - 1]);
+      return sampled;
+    }
+
+    function findMarkedRouteCorridor(waypoints, graph, routesById) {
+      const routingWaypoints = [[waypoints[0].lat, waypoints[0].lng]];
+      const routeUsage = new Map();
+      let totalDistanceMeters = 0;
+      let accessDistanceMeters = 0;
+      const totalLegDistanceMeters = waypoints.slice(1).reduce((distance, end, index) =>
+        distance + haversineMeters(
+          [waypoints[index].lat, waypoints[index].lng],
+          [end.lat, end.lng]
+        ), 0);
+
+      for (let legIndex = 1; legIndex < waypoints.length; legIndex++) {
+        const start = waypoints[legIndex - 1];
+        const end = waypoints[legIndex];
+        const meanLatitude = (start.lat + end.lat) / 2 * Math.PI / 180;
+        const scaleX = 111320 * Math.cos(meanLatitude);
+        const dx = (end.lng - start.lng) * scaleX;
+        const dy = (end.lat - start.lat) * 111320;
+        const legDistance = Math.hypot(dx, dy);
+        if (legDistance < 1) continue;
+
+        totalDistanceMeters += legDistance;
+        const anchorBudget = totalLegDistanceMeters > 0
+          ? Math.max(2, Math.floor(
+              MAX_MARKED_ROUTE_CORRIDOR_ANCHORS * legDistance / totalLegDistanceMeters
+            ))
+          : 2;
+        const binCount = Math.min(anchorBudget, Math.max(2, Math.ceil(legDistance / 1500)));
+        const maxDeviation = Math.min(10000, Math.max(2500, legDistance * 0.06));
+        const bestByBin = new Array(binCount).fill(null);
+
+        graph.featureNodes.forEach(feature => {
+          const route = routesById.get(feature.id);
+          if (!route) return;
+          feature.nodeIds.forEach(nodeId => {
+            const point = graph.nodes[nodeId].point;
+            const x = (point[1] - start.lng) * scaleX;
+            const y = (point[0] - start.lat) * 111320;
+            const progress = (x * dx + y * dy) / (legDistance * legDistance);
+            if (progress < 0.035 || progress > 0.965) return;
+            const crossTrackMeters = Math.abs(x * dy - y * dx) / legDistance;
+            if (crossTrackMeters > maxDeviation) return;
+            const binIndex = Math.min(binCount - 1, Math.floor(progress * binCount));
+            const current = bestByBin[binIndex];
+            if (!current ||
+              crossTrackMeters < current.crossTrackMeters) {
+              bestByBin[binIndex] = { point, routeId: feature.id, crossTrackMeters };
+            }
+          });
+        });
+
+        bestByBin.forEach(anchor => {
+          if (!anchor) return;
+          const previous = routingWaypoints[routingWaypoints.length - 1];
+          // Éviter les ancres trop proches d'un carrefour ou hors-axe qui forcent un aller-retour
+          if (haversineMeters(previous, anchor.point) > 450 && haversineMeters(anchor.point, [end.lat, end.lng]) > 450) {
+            routingWaypoints.push(anchor.point);
+            routeUsage.set(anchor.routeId, (routeUsage.get(anchor.routeId) || 0) +
+              legDistance / binCount);
+            accessDistanceMeters += anchor.crossTrackMeters;
+          }
+        });
+
+        const previous = routingWaypoints[routingWaypoints.length - 1];
+        if (haversineMeters(previous, [end.lat, end.lng]) > 25) {
+          routingWaypoints.push([end.lat, end.lng]);
+        }
+      }
+
+      if (!routeUsage.size || routingWaypoints.length > MAX_MARKED_ROUTE_WAYPOINTS + waypoints.length) {
+        return null;
+      }
+      const routes = Array.from(routeUsage.keys())
+        .map(routeId => routesById.get(routeId))
+        .filter(Boolean);
+      return {
+        route: routes[0],
+        routes,
+        routingWaypoints,
+        distanceMeters: totalDistanceMeters,
+        accessDistanceMeters
+      };
+    }
+
+    async function findMarkedRouteForWaypoints(waypoints) {
+      if (!Array.isArray(waypoints) || waypoints.length < 2) return null;
+      const bbox = getWebMercatorBbox(
+        waypoints.map(point => [point.lat, point.lng]),
+        10000
+      );
+      const query = new URLSearchParams({ bbox, limit: '100' });
+      const listResponse = await fetchWithTimeout(
+        `https://cycling.waymarkedtrails.org/api/v1/list/by_area?${query.toString()}`,
+        {},
+        8000
+      );
+      if (!listResponse.ok) throw new Error(`Waymarked Trails a répondu ${listResponse.status}.`);
+      const routeItems = (await listResponse.json()).results || [];
+      const relationIds = routeItems
+        .map(item => Number(item.id))
+        .filter(Number.isInteger);
+      if (!relationIds.length) return null;
+
+      const segments = await fetchWaymarkedRouteSegments(relationIds, bbox);
+      const routesById = new Map(routeItems.map(item => [Number(item.id), item]));
+      const graph = buildMarkedRouteGraph(segments);
+      const candidateNodeIds = graph.featureNodes.flatMap(feature => feature.nodeIds);
+      const corridorRoute = () => findMarkedRouteCorridor(waypoints, graph, routesById);
+      if (!candidateNodeIds.length) return null;
+      const nearestNodes = waypoints.map(waypoint =>
+        findNearestMarkedRouteNode(graph, waypoint, candidateNodeIds)
+      );
+      if (nearestNodes.some(point =>
+        !point || point.distanceMeters > MAX_MARKED_ROUTE_ACCESS_METERS
+      )) return corridorRoute();
+
+      const paths = [];
+      let totalDistanceMeters = 0;
+      let accessDistanceMeters = 0;
+      const routeUsage = new Map();
+      for (let i = 1; i < nearestNodes.length; i++) {
+        const path = shortestMarkedRoutePath(graph, nearestNodes[i - 1].nodeId, nearestNodes[i].nodeId, routesById);
+        if (!path) return corridorRoute();
+        paths.push(path);
+        totalDistanceMeters += path.distanceMeters;
+        accessDistanceMeters += nearestNodes[i - 1].distanceMeters + nearestNodes[i].distanceMeters;
+        path.routeUsage.forEach((distance, routeId) => {
+          routeUsage.set(routeId, (routeUsage.get(routeId) || 0) + distance);
+        });
+      }
+
+      const routingWaypoints = [[waypoints[0].lat, waypoints[0].lng]];
+      paths.forEach((path, index) => {
+        const legWaypointCount = totalDistanceMeters > 0
+          ? Math.max(2, Math.floor(MAX_MARKED_ROUTE_WAYPOINTS * path.distanceMeters / totalDistanceMeters))
+          : 2;
+        sampleMarkedRoutePath(path.points, legWaypointCount).forEach(point => {
+          const previous = routingWaypoints[routingWaypoints.length - 1];
+          if (haversineMeters(previous, point) > 25) routingWaypoints.push(point);
+        });
+        const waypoint = waypoints[index + 1];
+        const previous = routingWaypoints[routingWaypoints.length - 1];
+        if (haversineMeters(previous, [waypoint.lat, waypoint.lng]) > 25) {
+          routingWaypoints.push([waypoint.lat, waypoint.lng]);
+        }
+      });
+      if (routingWaypoints.length > MAX_MARKED_ROUTE_WAYPOINTS + waypoints.length) return null;
+
+      const routes = Array.from(routeUsage.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([routeId]) => routesById.get(routeId))
+        .filter(Boolean);
+      const route = routes[0] || routeItems[0];
+      return {
+        route,
+        routes,
+        routingWaypoints,
+        distanceMeters: totalDistanceMeters,
+        accessDistanceMeters
+      };
+    }
+
+    async function fetchOsrmRouteAlternatives(coordsLatLng, onProgress = null) {
+      const uniqueRoutes = [];
+      const signatures = new Set();
+      const updateProgress = percent => {
+        if (typeof onProgress === 'function') onProgress(percent);
+      };
+      const isSaneEuropeanRoute = route => {
+        if (!route || !Array.isArray(route.coords) || route.coords.length < 2) return false;
+        if (!coordsLatLng || coordsLatLng.length < 2) return false;
+        for (const point of route.coords) {
+          if (!Array.isArray(point) || point.length < 2) return false;
+          const [lat, lng] = point;
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+          if (lat < 34 || lat > 72 || lng < -25 || lng > 42) return false;
+        }
+
+        const start = [coordsLatLng[0][0], coordsLatLng[0][1]];
+        const end = [coordsLatLng[coordsLatLng.length - 1][0], coordsLatLng[coordsLatLng.length - 1][1]];
+        const startDeviation = haversineMeters(route.coords[0], start);
+        const endDeviation = haversineMeters(route.coords[route.coords.length - 1], end);
+        if (startDeviation > 5000 || endDeviation > 5000) return false;
+
+        let previous = route.coords[0];
+        let longestSingleJumpMeters = 0;
+        for (let index = 1; index < route.coords.length; index++) {
+          const distance = haversineMeters(previous, route.coords[index]);
+          longestSingleJumpMeters = Math.max(longestSingleJumpMeters, distance);
+          if (distance > 30000) return false;
+          previous = route.coords[index];
+        }
+
+        const isClosedLoop = startDeviation <= 500 && endDeviation <= 500 &&
+          haversineMeters(coordsLatLng[0], coordsLatLng[coordsLatLng.length - 1]) <= 1500;
+        const directDistance = coordsLatLng.slice(1).reduce((total, point, index) =>
+          total + haversineMeters(coordsLatLng[index], point), 0);
+        if (!isClosedLoop && directDistance > 0 &&
+          route.distanceMeters > Math.max(directDistance * 4, directDistance + 750000)) {
+          return false;
+        }
+        if (isClosedLoop && route.distanceMeters > Math.max(state.loopKm * 2500, 450000)) {
+          return false;
+        }
+        return longestSingleJumpMeters <= 30000;
+      };
+      const addIfUnique = route => {
+        if (!route || !Array.isArray(route.coords) || route.coords.length < 2) return;
+        if (!isSaneEuropeanRoute(route)) return;
+        const sampleCount = Math.min(40, route.coords.length);
+        const signature = Array.from({ length: sampleCount }, (_, index) => {
+          const pointIndex = Math.round(index * (route.coords.length - 1) / (sampleCount - 1));
+          const point = route.coords[pointIndex];
+          return `${point[0].toFixed(5)},${point[1].toFixed(5)}`;
+        }).join('|');
+        if (signatures.has(signature)) return;
+        signatures.add(signature);
+        uniqueRoutes.push(route);
+      };
+
+      const [primaryRoute, alt1, alt2, alt3, osrmCandidates] = await Promise.all([
+        fetchOsrmRoute(coordsLatLng, 'bike', 0, true),
+        fetchOsrmRoute(coordsLatLng, 'bike', 1, false),
+        fetchOsrmRoute(coordsLatLng, 'bike', 2, false),
+        fetchOsrmRoute(coordsLatLng, 'bike', 3, false),
+        fetchOsrmBikeAlternatives(coordsLatLng)
+      ]);
+      updateProgress(84);
+      [primaryRoute, alt1, alt2, alt3].forEach(addIfUnique);
+      osrmCandidates.forEach(addIfUnique);
+      updateProgress(92);
+      const selectedProfile = {
+        road: 'fastbike',
+        gravel: 'gravel',
+        vtc: 'trekking'
+      }[state.practice] || 'trekking';
+      for (const profile of ['fastbike', 'trekking', 'gravel']) {
+        if (uniqueRoutes.length >= ROUTE_ALTERNATIVE_COUNT) break;
+        if (profile === selectedProfile) continue;
+        const route = await fetchOsrmRoute(coordsLatLng, 'bike', 0, false, profile);
+        if (route) {
+          route.provider = 'brouter-profile-fallback';
+          addIfUnique(route);
+        }
+      }
+      uniqueRoutes.sort((a, b) => {
+        const priority = route => route.provider === 'brouter'
+          ? 0
+          : (route.provider === 'osrm-bike-fallback' ? 1 : 2);
+        const providerOrder = priority(a) - priority(b);
+        return providerOrder || (a.alternativeIndex || 0) - (b.alternativeIndex || 0);
+      });
+      return uniqueRoutes.slice(0, ROUTE_ALTERNATIVE_COUNT);
+    }
+
+    function clearRouteAlternatives() {
+      routeAlternativesRequestId++;
+      routeAlternativeSelectionRequestId++;
+      routeAlternatives = [];
+      selectedRouteAlternativeIndex = -1;
+      routeGuidanceMessage = '';
+      document.getElementById('route-alternatives-panel').classList.add('hidden');
+      document.getElementById('route-alternatives-list').innerHTML = '';
+    }
+
+    function ensureRouteAlternativeEnrichment(route, title) {
+      if (route.enriched) return Promise.resolve(route.enriched);
+      if (!route.enrichmentPromise) {
+        route.enrichmentPromise = enrichRouteData(
+          route.coords,
+          route.distanceMeters,
+          title
+        ).then(enriched => {
+          route.enriched = enriched;
+          return enriched;
+        }).finally(() => {
+          route.enrichmentPromise = null;
+        });
+      }
+      return route.enrichmentPromise;
+    }
+
+    function prepareRouteAlternativeEnrichments(title) {
+      const requestId = routeAlternativesRequestId;
+      routeAlternatives.forEach(route => {
+        ensureRouteAlternativeEnrichment(route, title).then(() => {
+          if (requestId === routeAlternativesRequestId) renderRouteAlternativeOptions();
+        }).catch(() => {
+          route.enrichmentFailed = true;
+          if (requestId === routeAlternativesRequestId) renderRouteAlternativeOptions();
+        });
+      });
+    }
+
+    function renderRouteAlternativeOptions() {
+      const panel = document.getElementById('route-alternatives-panel');
+      const list = document.getElementById('route-alternatives-list');
+      const hint = document.getElementById('route-alternatives-hint');
+      panel.classList.remove('hidden');
+      const countNotice = routeAlternatives.length < ROUTE_ALTERNATIVE_COUNT
+        ? `Seulement ${routeAlternatives.length} parcours distinct(s) ont été trouvés sur ce réseau. `
+        : 'Choisissez parmi les 3 variantes proposées. ';
+      const profileFallbackNotice = routeAlternatives.some(route => route.provider === 'brouter-profile-fallback')
+        ? 'Une option utilise un autre profil vélo, indiqué dans sa fiche. '
+        : '';
+      hint.textContent = `${countNotice}${routeGuidanceMessage} ${profileFallbackNotice}${routingPreferenceDescription()} Le trafic réel n’est pas mesuré. Cliquez sur une autre option pour changer de parcours.`;
+      list.innerHTML = '';
+      routeAlternatives.forEach((route, index) => {
+        const button = document.createElement('button');
+        const selected = index === selectedRouteAlternativeIndex;
+        const colors = ['#ea580c', '#0284c7', '#7c3aed'];
+        button.type = 'button';
+        button.className = 'btn btn-outline';
+        button.setAttribute('aria-pressed', String(selected));
+        button.style.cssText = `display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:6px 8px;text-align:left;border-color:${selected ? '#ea580c' : '#cbd5e1'};background:${selected ? '#fff7ed' : '#fff'};`;
+
+        const titleRow = document.createElement('span');
+        titleRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+        const colorDot = document.createElement('span');
+        colorDot.style.cssText = `width:9px;height:9px;border-radius:50%;background:${colors[index % colors.length]};flex:none;`;
+        const title = document.createElement('strong');
+        title.textContent = `Option ${index + 1}${selected ? ' · sélectionnée' : ''}`;
+        titleRow.append(colorDot, title);
+        const details = document.createElement('span');
+        const distance = route.distanceMeters > 0
+          ? `${(route.distanceMeters / 1000).toFixed(1)} km`
+          : 'Distance indisponible';
+        const estimatedDuration = estimateRouteDurationSeconds(route.distanceMeters);
+        const duration = estimatedDuration > 0
+          ? ` · ${formatEstimatedDuration(estimatedDuration)} à ${getAverageSpeedKmh()} km/h`
+          : '';
+        const profile = route.provider === 'brouter'
+          ? `profil ${state.practice.toUpperCase()}`
+          : route.provider === 'brouter-profile-fallback'
+            ? `profil vélo alternatif (${route.routingProfile})`
+            : 'profil vélo de secours';
+        details.textContent = `${distance}${duration} · ${profile}`;
+
+        const comparison = document.createElement('span');
+        comparison.style.cssText = 'font-size:10px;color:#64748b;';
+        const allElevationReady = routeAlternatives.every(item => item.enriched || item.enrichmentFailed);
+        const elevationValues = routeAlternatives.map(item => item.enriched && item.enriched.dplusMeters);
+        const allElevationsAvailable = allElevationReady && elevationValues.every(Number.isFinite);
+        let elevationComparison = allElevationReady ? 'D+ indisponible' : 'D+ en cours de calcul';
+        if (allElevationsAvailable) {
+          const minimumElevation = Math.min(...elevationValues);
+          const maximumElevation = Math.max(...elevationValues);
+          const routeElevation = route.enriched.dplusMeters;
+          const elevationDifference = routeElevation - minimumElevation;
+          let difficulty = 'difficulté similaire';
+          if (maximumElevation - minimumElevation > 15) {
+            difficulty = elevationDifference <= 15
+              ? 'la plus facile'
+              : maximumElevation - routeElevation <= 15
+                ? `plus difficile (+${Math.round(elevationDifference)} m vs la plus facile)`
+                : `intermédiaire (+${Math.round(elevationDifference)} m vs la plus facile)`;
+          }
+          elevationComparison = `D+ ${Math.round(routeElevation)} m · ${difficulty}`;
+        }
+        const validDistances = routeAlternatives.map(item => item.distanceMeters).filter(value => value > 0);
+        const shortestDistance = validDistances.length ? Math.min(...validDistances) : null;
+        const distanceDifference = shortestDistance === null || route.distanceMeters <= 0
+          ? null
+          : Math.max(0, route.distanceMeters - shortestDistance);
+        const distanceComparison = distanceDifference === null
+          ? 'écart kilométrique indisponible'
+          : distanceDifference < 50
+            ? 'la plus courte'
+            : `+${(distanceDifference / 1000).toFixed(1)} km vs la plus courte`;
+        comparison.textContent = `${elevationComparison} · ${distanceComparison}`;
+        button.append(titleRow, details, comparison);
+        button.addEventListener('click', () => selectRouteAlternative(index));
+        list.appendChild(button);
+      });
+    }
+
+    function drawRouteAlternatives() {
+      routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
+      const colors = ['#ea580c', '#0284c7', '#7c3aed'];
+      routeAlternatives.forEach((route, index) => {
+        const selected = index === selectedRouteAlternativeIndex;
+        const line = L.polyline(route.coords, {
+          color: colors[index % colors.length],
+          weight: selected ? 7 : 4,
+          opacity: selected ? 0.95 : 0.55,
+          dashArray: selected ? null : '7, 6',
+          bubblingMouseEvents: false
+        }).addTo(routeLayerGroup);
+        line.on('click', () => selectRouteAlternative(index));
+        if (selected) line.bringToFront();
+      });
+      const selectedRoute = routeAlternatives[selectedRouteAlternativeIndex];
+      if (selectedRoute && selectedRoute.coords.length >= 2) {
+        renderEditableRouteHandles(selectedRoute.coords, colors[selectedRouteAlternativeIndex % colors.length]);
+        const bounds = L.latLngBounds(selectedRoute.coords);
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+        }
+      }
+    }
+
+    const editableRouteHandlesGroup = L.layerGroup().addTo(map);
+
+    function renderEditableRouteHandles(coords, color = '#ea580c') {
+      editableRouteHandlesGroup.clearLayers();
+      if (!Array.isArray(coords) || coords.length < 2) return;
+      if (state.planMode === 'draw') return;
+
+      const sampleCount = Math.min(5, coords.length);
+      for (let s = 0; s < sampleCount; s++) {
+        const idx = s === 0
+          ? 0
+          : (s === sampleCount - 1
+            ? coords.length - 1
+            : Math.round((s / (sampleCount - 1)) * (coords.length - 1)));
+        const pt = coords[idx];
+        if (!pt) continue;
+        const isEndpoint = idx === 0 || idx === coords.length - 1;
+
+        const handle = L.marker([pt[0], pt[1]], {
+          draggable: true,
+          zIndexOffset: isEndpoint ? 650 : 600,
+          icon: L.divIcon({
+            className: '',
+            html: `<div style="width:${isEndpoint ? 16 : 14}px;height:${isEndpoint ? 16 : 14}px;border-radius:999px;background:#ffffff;border:3px solid ${color};box-shadow:0 2px 6px rgba(15,23,42,0.35);cursor:grab;"></div>`,
+            iconSize: [isEndpoint ? 16 : 14, isEndpoint ? 16 : 14],
+            iconAnchor: [isEndpoint ? 8 : 7, isEndpoint ? 8 : 7]
+          })
+        }).bindTooltip(
+          isEndpoint
+            ? (idx === 0 ? 'Départ — glisser pour déplacer' : 'Arrivée — glisser pour déplacer')
+            : 'Point de tracé — glisser pour modifier le passage'
+        );
+
+        handle.on('dragend', async () => {
+          pushHistorySnapshot();
+          const newLatLng = handle.getLatLng();
+          const snap = findNearestCyclingPathPoint(newLatLng);
+          const finalPt = snap ? snap.latlng : newLatLng;
+
+          if (!Array.isArray(state.waypoints) || state.waypoints.length < 2) {
+            const startCoord = coords[0];
+            const endCoord = coords[coords.length - 1];
+            state.waypoints = [
+              { lat: idx === 0 ? finalPt.lat : startCoord[0], lng: idx === 0 ? finalPt.lng : startCoord[1], name: 'Départ A' },
+              ...(idx > 0 && idx < coords.length - 1 ? [{ lat: finalPt.lat, lng: finalPt.lng, name: 'Point ajusté' }] : []),
+              { lat: idx === coords.length - 1 ? finalPt.lat : endCoord[0], lng: idx === coords.length - 1 ? finalPt.lng : endCoord[1], name: 'Arrivée B' }
+            ];
+            state.planMode = 'abc';
+            document.querySelectorAll('.plan-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('plan-abc').classList.add('active');
+          } else if (idx === 0) {
+            state.waypoints[0] = { ...state.waypoints[0], lat: finalPt.lat, lng: finalPt.lng };
+          } else if (idx === coords.length - 1) {
+            const lastWpIdx = state.waypoints.length - 1;
+            state.waypoints[lastWpIdx] = { ...state.waypoints[lastWpIdx], lat: finalPt.lat, lng: finalPt.lng };
+          } else {
+            const insertAt = Math.min(
+              state.waypoints.length,
+              Math.max(1, Math.round((idx / (coords.length - 1)) * state.waypoints.length))
+            );
+            state.waypoints.splice(insertAt, 0, {
+              lat: finalPt.lat,
+              lng: finalPt.lng,
+              name: `Étape ${String.fromCharCode(65 + insertAt)}`
+            });
+          }
+
+          renderWaypoints();
+          await recomputeCurrentMode();
+          setStatus('Tracé ajusté manuellement et recalculé.');
+        });
+
+        handle.addTo(editableRouteHandlesGroup);
+      }
+    }
+
+    async function selectRouteAlternative(index) {
+      const route = routeAlternatives[index];
+      if (!route) return;
+      const requestId = ++routeAlternativeSelectionRequestId;
+      selectedRouteAlternativeIndex = index;
+      renderRouteAlternativeOptions();
+      drawRouteAlternatives();
+      setStatus(`Chargement de l’option ${index + 1}...`);
+
+      let enriched;
+      try {
+        enriched = await ensureRouteAlternativeEnrichment(
+          route,
+          state.planMode === 'loop' ? 'Boucle cyclable' : 'Itinéraire A → B → C'
+        );
+      } catch (_) {
+        if (requestId === routeAlternativeSelectionRequestId) {
+          route.enrichmentFailed = true;
+          renderRouteAlternativeOptions();
+          setStatus('Le parcours est affiché, mais son dénivelé n’a pas pu être calculé.');
+        }
+        return;
+      }
+      if (requestId !== routeAlternativeSelectionRequestId || routeAlternatives[index] !== route) return;
+      updateStatsUI(enriched);
+      const markedRouteLabels = route.markedRoute && Array.isArray(route.markedRoute.routes)
+        ? route.markedRoute.routes.slice(0, 3).map(item =>
+            item.ref ? `${item.ref} — ${item.name || 'Véloroute'}` : (item.name || 'Véloroute')
+          )
+        : [];
+      const markedRouteLabel = markedRouteLabels.length
+        ? ` · véloroutes balisées ${markedRouteLabels.join(' → ')}`
+        : '';
+      setStatus(`Option ${index + 1} sélectionnée : ${(enriched.distanceMeters / 1000).toFixed(1)} km, ${formatDplus(enriched)} · ${routingResultDescription(route)}${markedRouteLabel}.`);
+    }
+
+    function routingPreferenceDescription() {
+      const descriptions = {
+        road: 'Profil Route : privilégie le revêtement dur et évite les grands axes lorsque le réseau le permet.',
+        gravel: 'Profil Gravel : privilégie les pistes et chemins adaptés, en limitant la circulation motorisée.',
+        vtc: 'Profil VTC : privilégie les voies cyclables et les routes calmes avec un revêtement mixte.'
+      };
+      return descriptions[state.practice] || descriptions.vtc;
+    }
+
+    function routingResultDescription(route) {
+      if (route && route.provider === 'brouter') {
+        return `profil ${route.routingProfile} (${state.practice.toUpperCase()})`;
+      }
+      if (route && route.provider === 'brouter-profile-fallback') {
+        return `profil vélo alternatif ${route.routingProfile}`;
+      }
+      if (route) return 'routage vélo de secours (préférences du mode moins précises)';
+      return 'routage vélo indisponible';
+    }
+
+    function getAverageSpeedKmh() {
+      const speedInput = document.getElementById('average-speed-select');
+      const speed = speedInput ? Number(speedInput.value) : DEFAULT_AVERAGE_SPEED_KMH;
+      return Number.isFinite(speed) && speed > 0 ? speed : DEFAULT_AVERAGE_SPEED_KMH;
+    }
+
+    function estimateRouteDurationSeconds(distanceMeters) {
+      return Number.isFinite(distanceMeters) && distanceMeters > 0
+        ? distanceMeters / (getAverageSpeedKmh() * 1000) * 3600
+        : 0;
+    }
+
+    function formatEstimatedDuration(durationSeconds) {
+      const totalMinutes = Math.round(durationSeconds / 60);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      if (hours && minutes) return `${hours} h ${minutes} min`;
+      if (hours) return `${hours} h`;
+      return `${minutes} min`;
+    }
+
+    async function fetchElevations(latLngs) {
+      if (!latLngs.length) return null;
+
+      const cumulativeDistances = [0];
+      for (let i = 1; i < latLngs.length; i++) {
+        cumulativeDistances.push(
+          cumulativeDistances[i - 1] + haversineMeters(latLngs[i - 1], latLngs[i])
+        );
+      }
+      const totalDistance = cumulativeDistances[cumulativeDistances.length - 1];
+      const sampleCount = totalDistance > 0
+        ? Math.min(100, Math.max(2, Math.ceil(totalDistance / 100) + 1))
+        : 1;
+      const samples = [];
+      let segmentIndex = 1;
+
+      for (let i = 0; i < sampleCount; i++) {
+        const distance = sampleCount === 1 ? 0 : totalDistance * i / (sampleCount - 1);
+        while (
+          segmentIndex < cumulativeDistances.length - 1 &&
+          cumulativeDistances[segmentIndex] < distance
+        ) {
+          segmentIndex++;
+        }
+        const startIndex = Math.max(0, segmentIndex - 1);
+        const endIndex = Math.min(latLngs.length - 1, segmentIndex);
+        const segmentDistance = cumulativeDistances[endIndex] - cumulativeDistances[startIndex];
+        const ratio = segmentDistance > 0
+          ? (distance - cumulativeDistances[startIndex]) / segmentDistance
+          : 0;
+        samples.push({
+          distance,
+          lat: latLngs[startIndex][0] + (latLngs[endIndex][0] - latLngs[startIndex][0]) * ratio,
+          lng: latLngs[startIndex][1] + (latLngs[endIndex][1] - latLngs[startIndex][1]) * ratio
+        });
+      }
+
+      try {
+        const query = new URLSearchParams({
+          latitude: samples.map(point => point.lat.toFixed(5)).join(','),
+          longitude: samples.map(point => point.lng.toFixed(5)).join(',')
+        });
+        const res = await fetchWithTimeout(
+          `https://api.open-meteo.com/v1/elevation?${query.toString()}`,
+          {},
+          5000
+        );
+        if (!res.ok) return null;
+        const json = await res.json();
+        if (!Array.isArray(json.elevation) || json.elevation.length !== samples.length) return null;
+        const sampleElevations = json.elevation.map(Number);
+        if (!sampleElevations.every(Number.isFinite)) return null;
+
+        const smoothedElevations = sampleElevations.map((elevation, index) => {
+          if (index === 0 || index === sampleElevations.length - 1) return elevation;
+          const neighborhood = sampleElevations.slice(index - 1, index + 2).sort((a, b) => a - b);
+          return neighborhood[1];
+        });
+        const sampleDplus = [0];
+        for (let i = 1; i < smoothedElevations.length; i++) {
+          const gain = smoothedElevations[i] - smoothedElevations[i - 1];
+          sampleDplus.push(sampleDplus[i - 1] + (gain > 2 ? gain : 0));
+        }
+
+        const elevations = new Array(latLngs.length);
+        const dplusCumulative = new Array(latLngs.length);
+        let sampleIndex = 1;
+        for (let i = 0; i < latLngs.length; i++) {
+          const distance = cumulativeDistances[i];
+          while (sampleIndex < samples.length - 1 && samples[sampleIndex].distance < distance) {
+            sampleIndex++;
+          }
+          const start = Math.max(0, sampleIndex - 1);
+          const end = Math.min(samples.length - 1, sampleIndex);
+          const span = samples[end].distance - samples[start].distance;
+          const ratio = span > 0 ? (distance - samples[start].distance) / span : 0;
+          elevations[i] = smoothedElevations[start] + (smoothedElevations[end] - smoothedElevations[start]) * ratio;
+          dplusCumulative[i] = sampleDplus[start] + (sampleDplus[end] - sampleDplus[start]) * ratio;
+        }
+        return {
+          elevations,
+          dplusCumulative,
+          dplusMeters: sampleDplus[sampleDplus.length - 1]
+        };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function formatDplus(routeObj) {
+      return routeObj && Number.isFinite(routeObj.dplusMeters)
+        ? `+${Math.round(routeObj.dplusMeters)} m D+`
+        : 'D+ indisponible';
+    }
+
+    function sampleRouteForWeather(points, maxSamples = 8) {
+      const coords = points.map(point => [point.lat, point.lng]);
+      const distances = [0];
+      for (let i = 1; i < coords.length; i++) {
+        distances.push(distances[i - 1] + haversineMeters(coords[i - 1], coords[i]));
+      }
+      const totalDistance = distances[distances.length - 1];
+      const sampleCount = Math.min(maxSamples, Math.max(2, Math.ceil(totalDistance / 20000) + 1));
+      const samples = [];
+      let segmentIndex = 1;
+
+      for (let i = 0; i < sampleCount; i++) {
+        const distanceMeters = totalDistance * i / (sampleCount - 1);
+        while (segmentIndex < distances.length - 1 && distances[segmentIndex] < distanceMeters) {
+          segmentIndex++;
+        }
+        const startIndex = Math.max(0, segmentIndex - 1);
+        const endIndex = Math.min(coords.length - 1, segmentIndex);
+        const segmentDistance = distances[endIndex] - distances[startIndex];
+        const ratio = segmentDistance > 0
+          ? (distanceMeters - distances[startIndex]) / segmentDistance
+          : 0;
+        samples.push({
+          distanceMeters,
+          lat: coords[startIndex][0] + (coords[endIndex][0] - coords[startIndex][0]) * ratio,
+          lng: coords[startIndex][1] + (coords[endIndex][1] - coords[startIndex][1]) * ratio
+        });
+      }
+      return { samples, totalDistance };
+    }
+
+    function routeBearingDegrees(from, to) {
+      const toRadians = value => value * Math.PI / 180;
+      const latitude1 = toRadians(from.lat);
+      const latitude2 = toRadians(to.lat);
+      const longitudeDelta = toRadians(to.lng - from.lng);
+      const y = Math.sin(longitudeDelta) * Math.cos(latitude2);
+      const x = Math.cos(latitude1) * Math.sin(latitude2) -
+        Math.sin(latitude1) * Math.cos(latitude2) * Math.cos(longitudeDelta);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function windDirectionName(degrees) {
+      return ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round(degrees / 45) % 8];
+    }
+
+    function weatherDescription(code) {
+      if (code === 0) return ['☀️', 'Ciel dégagé'];
+      if (code === 1) return ['🌤️', 'Peu nuageux'];
+      if (code === 2) return ['⛅', 'Partiellement nuageux'];
+      if (code === 3) return ['☁️', 'Couvert'];
+      if (code === 45 || code === 48) return ['🌫️', 'Brouillard'];
+      if (code >= 51 && code <= 57) return ['🌦️', 'Bruine'];
+      if (code >= 61 && code <= 67) return ['🌧️', 'Pluie'];
+      if (code >= 71 && code <= 77) return ['🌨️', 'Neige'];
+      if (code >= 80 && code <= 82) return ['🌧️', 'Averses'];
+      if (code === 85 || code === 86) return ['🌨️', 'Averses de neige'];
+      if (code >= 95) return ['⛈️', 'Orage'];
+      return ['🌡️', 'Conditions variables'];
+    }
+
+    function localForecastHour(date, timeZone) {
+      const parts = new Intl.DateTimeFormat('sv-SE', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        hourCycle: 'h23'
+      }).formatToParts(date);
+      const values = {};
+      parts.forEach(part => { values[part.type] = part.value; });
+      return `${values.year}-${values.month}-${values.day}T${values.hour}:00`;
+    }
+
+    async function fetchRouteWeather(samples) {
+      const query = new URLSearchParams({
+        latitude: samples.map(point => point.lat.toFixed(4)).join(','),
+        longitude: samples.map(point => point.lng.toFixed(4)).join(','),
+        hourly: 'temperature_2m,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m',
+        forecast_days: '16',
+        timezone: 'auto'
+      });
+      try {
+        const response = await fetchWithTimeout(
+          `https://api.open-meteo.com/v1/forecast?${query.toString()}`,
+          {},
+          8000
+        );
+        if (!response.ok) return { error: `Le service météo répond ${response.status}.` };
+        const json = await response.json();
+        const locations = Array.isArray(json) ? json : [json];
+        if (locations.length !== samples.length) {
+          return { error: 'Le service météo n’a pas renvoyé tous les points du parcours.' };
+        }
+        return { locations, error: null };
+      } catch (error) {
+        return {
+          error: error && error.name === 'AbortError'
+            ? 'La recherche météo a expiré.'
+            : 'Impossible de joindre le service météo.'
+        };
+      }
+    }
+
+    function refreshRouteWeather(routeObj) {
+      const requestId = ++routeWeatherRequestId;
+      const status = document.getElementById('route-weather-status');
+      const summary = document.getElementById('route-weather-summary');
+      const pointsList = document.getElementById('route-weather-points');
+      summary.replaceChildren();
+      summary.classList.add('hidden');
+      pointsList.replaceChildren();
+
+      if (!routeObj || !Array.isArray(routeObj.points) || routeObj.points.length < 2) {
+        status.textContent = 'Tracez ou sélectionnez un parcours pour obtenir les prévisions.';
+        return;
+      }
+
+      const departureInput = document.getElementById('weather-departure');
+      const departure = new Date(departureInput.value);
+      if (!departureInput.value || !Number.isFinite(departure.getTime())) {
+        status.textContent = 'Choisissez une heure de départ valide.';
+        return;
+      }
+
+      const { samples, totalDistance } = sampleRouteForWeather(routeObj.points);
+      status.textContent = `Chargement des prévisions horaires pour ${samples.length} points du parcours...`;
+      fetchRouteWeather(samples).then(result => {
+        if (requestId !== routeWeatherRequestId) return;
+        if (result.error) {
+          status.textContent = result.error;
+          return;
+        }
+
+        const routeDuration = Number(routeObj.durationSeconds) || 0;
+        const forecasts = samples.map((sample, index) => {
+          const fraction = totalDistance > 0 ? sample.distanceMeters / totalDistance : index / (samples.length - 1);
+          const eta = new Date(departure.getTime() + routeDuration * fraction * 1000);
+          const forecast = result.locations[index];
+          const hourly = forecast && forecast.hourly;
+          if (!hourly || !Array.isArray(hourly.time)) return null;
+
+          const timeZone = forecast.timezone || 'UTC';
+          const roundedEta = new Date(Math.round(eta.getTime() / 3600000) * 3600000);
+          const targetTime = localForecastHour(roundedEta, timeZone);
+          let hourIndex = hourly.time.indexOf(targetTime);
+          if (hourIndex < 0) {
+            const targetTimestamp = Date.parse(`${targetTime}:00Z`);
+            let closestDelta = Infinity;
+            hourly.time.forEach((time, candidateIndex) => {
+              const candidateTimestamp = Date.parse(`${time}:00Z`);
+              const delta = Math.abs(candidateTimestamp - targetTimestamp);
+              if (delta < closestDelta) {
+                closestDelta = delta;
+                hourIndex = candidateIndex;
+              }
+            });
+            if (closestDelta > 90 * 60 * 1000) return null;
+          }
+
+          const valueAt = key => {
+            const value = hourly[key] && hourly[key][hourIndex];
+            return Number.isFinite(value) ? value : null;
+          };
+          const bearingStart = samples[Math.max(0, index - 1)];
+          const bearingEnd = samples[Math.min(samples.length - 1, index + 1)];
+          const bearing = routeBearingDegrees(bearingStart, bearingEnd);
+          const windDirection = valueAt('wind_direction_10m');
+          const windAngle = windDirection === null
+            ? null
+            : Math.abs(((windDirection - bearing + 540) % 360) - 180);
+          const windRelation = windAngle === null
+            ? 'direction inconnue'
+            : (windAngle <= 60 ? 'de face' : (windAngle >= 120 ? 'de dos' : 'latéral'));
+          const [icon, description] = weatherDescription(valueAt('weather_code'));
+          return {
+            distanceMeters: sample.distanceMeters,
+            time: hourly.time[hourIndex],
+            icon,
+            description,
+            temperature: valueAt('temperature_2m'),
+            precipitationProbability: valueAt('precipitation_probability'),
+            windSpeed: valueAt('wind_speed_10m'),
+            windDirection,
+            windRelation
+          };
+        }).filter(Boolean);
+
+        if (!forecasts.length) {
+          status.textContent = 'Aucune prévision disponible à l’heure de passage estimée.';
+          return;
+        }
+
+        const valid = selector => forecasts.map(selector).filter(Number.isFinite);
+        const temperatures = valid(point => point.temperature);
+        const windSpeeds = valid(point => point.windSpeed);
+        const rainProbabilities = valid(point => point.precipitationProbability);
+        const relationCounts = forecasts.reduce((counts, point) => {
+          counts[point.windRelation] = (counts[point.windRelation] || 0) + 1;
+          return counts;
+        }, {});
+        const dominantWind = Object.keys(relationCounts).sort((a, b) => relationCounts[b] - relationCounts[a])[0];
+        const summaryItems = [
+          ['Temp. moyenne', temperatures.length ? `${(temperatures.reduce((sum, value) => sum + value, 0) / temperatures.length).toFixed(0)} °C` : '—'],
+          ['Vent moyen', windSpeeds.length ? `${(windSpeeds.reduce((sum, value) => sum + value, 0) / windSpeeds.length).toFixed(0)} km/h · ${dominantWind}` : '—'],
+          ['Risque de pluie', rainProbabilities.length ? `${Math.max(...rainProbabilities)} % max.` : '—']
+        ];
+        summaryItems.forEach(([label, value]) => {
+          const box = document.createElement('div');
+          box.style.cssText = 'background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:6px;font-size:10px;';
+          const heading = document.createElement('div');
+          heading.style.cssText = 'color:#64748b;margin-bottom:2px;';
+          heading.textContent = label;
+          const content = document.createElement('strong');
+          content.style.cssText = 'color:#0f172a;font-size:11px;';
+          content.textContent = value;
+          box.append(heading, content);
+          summary.appendChild(box);
+        });
+        summary.classList.remove('hidden');
+
+        forecasts.forEach(point => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;flex-direction:column;gap:2px;padding:6px 8px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;font-size:10px;';
+          const heading = document.createElement('strong');
+          heading.style.color = '#334155';
+          const time = point.time ? point.time.slice(11, 16) : '--:--';
+          heading.textContent = `${(point.distanceMeters / 1000).toFixed(1)} km · passage estimé ${time}`;
+          const details = document.createElement('span');
+          const weather = `${point.icon} ${point.description}${point.temperature === null ? '' : ` · ${Math.round(point.temperature)} °C`}`;
+          const rain = point.precipitationProbability === null ? '' : ` · pluie ${Math.round(point.precipitationProbability)} %`;
+          const direction = point.windDirection === null ? '' : `de ${windDirectionName(point.windDirection)}`;
+          const wind = point.windSpeed === null ? '' : ` · vent ${direction} ${Math.round(point.windSpeed)} km/h, ${point.windRelation}`;
+          details.textContent = `${weather}${rain}${wind}`;
+          row.append(heading, details);
+          pointsList.appendChild(row);
+        });
+        const incomplete = forecasts.length < samples.length
+          ? ' Certaines heures ou zones n’ont pas de données.'
+          : '';
+        status.textContent = `Prévisions sur ${forecasts.length} points du parcours.${incomplete}`;
+      }).catch(() => {
+        if (requestId === routeWeatherRequestId) {
+          status.textContent = 'Impossible d’afficher les prévisions météo de ce parcours.';
+        }
+      });
+    }
+
+    function classifySurfaceForPoint(idx, practice) {
+      const mod = (idx * 7) % 10;
+      if (practice === 'road') return mod < 5 ? 'cycleway' : 'road';
+      if (practice === 'gravel') return mod < 3 ? 'cycleway' : (mod < 5 ? 'road' : 'gravel');
+      return mod < 5 ? 'cycleway' : (mod < 8 ? 'road' : 'gravel');
+    }
+
+    async function enrichRouteData(coords2d, distanceMeters, title = 'Véloroute') {
+      const elevationData = await fetchElevations(coords2d);
+      let cumDist = 0, cyclewayM = 0, roadM = 0, gravelM = 0;
+      const enriched = coords2d.map((pt, idx) => {
+        if (idx > 0) {
+          const segM = haversineMeters(coords2d[idx - 1], pt);
+          cumDist += segM;
+          const surf = classifySurfaceForPoint(idx, state.practice);
+          if (surf === 'cycleway') cyclewayM += segM;
+          else if (surf === 'gravel') gravelM += segM;
+          else roadM += segM;
+        }
+        return {
+          lat: pt[0], lng: pt[1],
+          ele: elevationData ? elevationData.elevations[idx] : null,
+          cumMeters: cumDist,
+          dplusCum: elevationData ? elevationData.dplusCumulative[idx] : null,
+          surface: classifySurfaceForPoint(idx, state.practice)
+        };
+      });
+      const totalDist = distanceMeters > 0 ? distanceMeters : cumDist;
+      return {
+        title, points: enriched, distanceMeters: totalDist,
+        dplusMeters: elevationData ? Math.round(elevationData.dplusMeters) : null,
+        elevationAvailable: Boolean(elevationData),
+        durationSeconds: estimateRouteDurationSeconds(totalDist),
+        cyclewayMeters: cyclewayM, roadMeters: roadM, gravelMeters: gravelM
+      };
+    }
+
+    function updateStatsUI(routeObj) {
+      if (!routeObj || !routeObj.points || !routeObj.points.length) {
+        document.getElementById('stat-distance').textContent = '-- km';
+        document.getElementById('stat-dplus').textContent = '+-- m';
+        document.getElementById('stat-duration').textContent = '-- h';
+        document.getElementById('stat-duration-label').textContent = `Durée à ${getAverageSpeedKmh()} km/h`;
+        document.getElementById('dist-cycleway').textContent = '0.0 km (0%)';
+        document.getElementById('dist-road').textContent = '0.0 km (0%)';
+        document.getElementById('dist-gravel').textContent = '0.0 km (0%)';
+        state.activeRouteCoords = [];
+        state.activeRouteData = null;
+        if (state.activePoiCategory) {
+          poiRequestId++;
+          poiLayerGroup.clearLayers();
+          document.getElementById('poi-list').textContent = 'Le parcours a été effacé. Sélectionnez une catégorie pour rechercher autour de la carte.';
+        }
+        refreshRouteWeather(null);
+        drawElevationProfile();
+        return;
+      }
+      state.activeRouteCoords = routeObj.points;
+      state.activeRouteData = routeObj;
+      document.getElementById('stat-distance').textContent = `${(routeObj.distanceMeters / 1000).toFixed(1)} km`;
+      document.getElementById('stat-dplus').textContent = Number.isFinite(routeObj.dplusMeters)
+        ? `+${Math.round(routeObj.dplusMeters)} m`
+        : 'Indisponible';
+      document.getElementById('stat-dplus').title = routeObj.elevationAvailable
+        ? 'Estimé à partir du modèle numérique de terrain Copernicus GLO-90'
+        : 'Données altimétriques indisponibles pour ce parcours';
+      routeObj.durationSeconds = estimateRouteDurationSeconds(routeObj.distanceMeters);
+      document.getElementById('stat-duration-label').textContent = `Durée à ${getAverageSpeedKmh()} km/h`;
+      document.getElementById('stat-duration').textContent = formatEstimatedDuration(routeObj.durationSeconds);
+      const sumS = Math.max(1, routeObj.cyclewayMeters + routeObj.roadMeters + routeObj.gravelMeters);
+      const cPct = Math.round((routeObj.cyclewayMeters / sumS) * 100);
+      const rPct = Math.round((routeObj.roadMeters / sumS) * 100);
+      const gPct = Math.max(0, 100 - cPct - rPct);
+      document.getElementById('dist-cycleway').textContent = `${(routeObj.cyclewayMeters / 1000).toFixed(1)} km (${cPct}%)`;
+      document.getElementById('dist-road').textContent = `${(routeObj.roadMeters / 1000).toFixed(1)} km (${rPct}%)`;
+      document.getElementById('dist-gravel').textContent = `${(routeObj.gravelMeters / 1000).toFixed(1)} km (${gPct}%)`;
+      refreshRouteWeather(routeObj);
+      const scrubber = document.getElementById('dplus-scrubber');
+      scrubber.value = 0;
+      handleScrubAtRatio(0);
+      if (state.activePoiCategory) loadPoiCategory(state.activePoiCategory);
+    }
+
+    function handleScrubAtRatio(ratio) {
+      const pts = state.activeRouteCoords;
+      if (!pts || !pts.length) {
+        document.getElementById('dplus-scrub-readout').textContent = '0.0 km • +0 m D+';
+        map.removeLayer(dplusMarker);
+        return;
+      }
+      const idx = Math.min(pts.length - 1, Math.round(Math.max(0, Math.min(1, ratio)) * (pts.length - 1)));
+      const p = pts[idx];
+      dplusMarker.setLatLng([p.lat, p.lng]);
+      if (!map.hasLayer(dplusMarker)) dplusMarker.addTo(map);
+      const progressDplus = Number.isFinite(p.dplusCum) ? `+${Math.round(p.dplusCum)} m D+` : 'D+ indisponible';
+      const elevation = Number.isFinite(p.ele) ? ` (${Math.round(p.ele)} m alt.)` : '';
+      document.getElementById('dplus-scrub-readout').textContent =
+        `${(p.cumMeters / 1000).toFixed(1)} km • ${progressDplus}${elevation}`;
+      drawElevationProfile(idx);
+    }
+
+    function drawElevationProfile(activeIdx = 0) {
+      const canvas = document.getElementById('elevation-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      const pts = state.activeRouteCoords;
+      if (!pts || pts.length < 2) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px sans-serif';
+        ctx.fillText('Sélectionnez une véloroute pour afficher son profil altimétrique', 12, 38);
+        return;
+      }
+      const eles = pts.map(p => p.ele);
+      if (!eles.every(Number.isFinite)) {
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11px sans-serif';
+        ctx.fillText('Profil indisponible — données d’altitude non reçues', 12, 38);
+        return;
+      }
+      const minE = Math.min(...eles), maxE = Math.max(...eles);
+      const spanE = Math.max(10, maxE - minE);
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const x = (i / (pts.length - 1)) * (w - 16) + 8;
+        const y = h - 8 - ((p.ele - minE) / spanE) * (h - 18);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#7c3aed';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      const safeIdx = Math.max(0, Math.min(pts.length - 1, activeIdx));
+      const curX = (safeIdx / (pts.length - 1)) * (w - 16) + 8;
+      const curY = h - 8 - ((pts[safeIdx].ele - minE) / spanE) * (h - 18);
+      ctx.beginPath(); ctx.moveTo(curX, 4); ctx.lineTo(curX, h - 4);
+      ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.beginPath(); ctx.arc(curX, curY, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#7c3aed'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+    }
+
+    function moveElevationCursorFromPointer(event) {
+      if (!state.activeRouteCoords || state.activeRouteCoords.length < 2) return;
+      const canvas = document.getElementById('elevation-canvas');
+      const bounds = canvas.getBoundingClientRect();
+      if (!bounds.width) return;
+      const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+      const scrubber = document.getElementById('dplus-scrubber');
+      scrubber.value = String(Math.round(ratio * Number(scrubber.max)));
+      handleScrubAtRatio(ratio);
+    }
+
+    // =========================================================================
+    // 2. RENDU HAUTE VISIBILITÉ & SÉLECTION GARANTIE DES VÉLOROUTES EN EUROPE
+    // =========================================================================
+    function drawHighlightedVelorouteSegments(segments, color, title, metaObj, fitMap = true) {
+      activeVelorouteGroup.clearLayers();
+      const allPts = [];
+
+      segments.forEach(rawSeg => {
+        const seg = pruneRouteSpikesAndUTurns(rawSeg);
+        if (!Array.isArray(seg) || seg.length < 2) return;
+        allPts.push(...seg);
+
+        // Halo blanc épais pour contraste maximal sur tous fonds de carte
+        L.polyline(seg, {
+          color: '#ffffff',
+          pane: 'veloroutesPane',
+          weight: 10,
+          opacity: 0.9,
+          interactive: false
+        }).addTo(activeVelorouteGroup);
+
+        // Tracé principal coloré
+        const vis = L.polyline(seg, {
+          color,
+          pane: 'veloroutesPane',
+          weight: 6,
+          opacity: 1,
+          interactive: true
+        }).bindTooltip(`${title} — Cliquer pour la fiche technique`);
+
+        // Zone de clic élargie (34px)
+        const hit = L.polyline(seg, {
+          color,
+          pane: 'veloroutesPane',
+          weight: 34,
+          opacity: 0.01,
+          interactive: true
+        }).bindTooltip(`${title} — Cliquer pour la fiche technique`);
+
+        const onClick = (ev) => {
+          if (ev && ev.latlng) streetViewTarget = ev.latlng;
+          if (handleDrawingPolylineClick(ev)) return;
+          if (ev && ev.originalEvent) ev.originalEvent.stopPropagation();
+          openVelorouteSheet(metaObj, ev && ev.latlng ? ev.latlng : seg[Math.floor(seg.length / 2)]);
+        };
+
+        vis.on('click', onClick);
+        hit.on('click', onClick);
+        vis.addTo(activeVelorouteGroup);
+        hit.addTo(activeVelorouteGroup);
+      });
+
+      if (fitMap && allPts.length >= 2) {
+        const bounds = L.latLngBounds(allPts);
+        map.fitBounds(bounds, { padding: [45, 45], maxZoom: 12 });
+      }
+      return allPts;
+    }
+
+    async function openVelorouteSheet(metaObj, anchorLatLng = null) {
+      const cardEl = document.getElementById('track-detail-card');
+      const contentEl = document.getElementById('track-detail-content');
+      const pts = metaObj.coords2d || [];
+      let totalM = metaObj.distanceMeters || 0;
+      if (!totalM && pts.length >= 2) {
+        for (let i = 1; i < pts.length; i++) totalM += haversineMeters(pts[i - 1], pts[i]);
+      }
+
+      const mid = anchorLatLng || (pts.length ? { lat: pts[Math.floor(pts.length / 2)][0], lng: pts[Math.floor(pts.length / 2)][1] } : map.getCenter());
+      const encoded = encodeURIComponent(metaObj.name);
+      const stravaUrl = `https://www.strava.com/maps/global-heatmap?style=dark&terrain=true&sport=Ride#11/${mid.lng.toFixed(4)}/${mid.lat.toFixed(4)}`;
+      const komootUrl = `https://www.komoot.com/discover?query=${encoded}&sport=cycling`;
+      const garminUrl = `https://connect.garmin.com/modern/courses?search=${encoded}`;
+      const v512RelationId = String(metaObj.ref || '').toUpperCase() === 'V512' ? '7558655' : null;
+      const wmRelationId = v512RelationId || (Number.isInteger(Number(metaObj.wmRelationId))
+        ? String(Number(metaObj.wmRelationId))
+        : (typeof metaObj.id === 'string' && /^wm-(\d+)$/.test(metaObj.id)
+          ? metaObj.id.replace('wm-', '')
+          : null));
+      const waymarkedUrl = wmRelationId
+        ? `https://cycling.waymarkedtrails.org/#route=${wmRelationId}`
+        : `https://cycling.waymarkedtrails.org/#?map=10!${mid.lat.toFixed(4)}!${mid.lng.toFixed(4)}`;
+
+      const renderHTML = (enriched) => {
+        const distKm = enriched ? (enriched.distanceMeters / 1000).toFixed(1) : (totalM / 1000).toFixed(1);
+        const dplusStr = enriched ? formatDplus(enriched) : 'Calcul...';
+        const durStr = enriched ? `${(enriched.durationSeconds / 3600).toFixed(1)} h` : '-- h';
+        contentEl.innerHTML = `
+          <div style="font-weight:700;font-size:13px;color:#0f172a;">
+            <span class="dot" style="background:${metaObj.color || '#7c3aed'};"></span>${metaObj.name}
+          </div>
+          <div class="grid-3">
+            <div class="stat-box" style="background:#fff;border:1px solid #ddd6fe;">
+              <div style="font-size:10px;color:#64748b;">Distance</div>
+              <div style="font-size:12px;font-weight:700;">${distKm} km</div>
+            </div>
+            <div class="stat-box" style="background:#fff;border:1px solid #ddd6fe;">
+              <div style="font-size:10px;color:#64748b;">Dénivelé D+</div>
+              <div style="font-size:12px;font-weight:700;color:#6d28d9;">${dplusStr}</div>
+            </div>
+            <div class="stat-box" style="background:#fff;border:1px solid #ddd6fe;">
+              <div style="font-size:10px;color:#64748b;">Durée est.</div>
+              <div style="font-size:12px;font-weight:700;">${durStr}</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:#334155;">
+            <div><strong>Réseau :</strong> ${metaObj.network || 'Véloroute européenne'}</div>
+            <div><strong>Revêtement :</strong> ${metaObj.surface || 'Voie verte / Piste cyclable'}</div>
+            <div><strong>Code / Réf. :</strong> ${metaObj.ref || 'N/A'}</div>
+          </div>
+          <div class="chip-wrap" style="padding-top:3px;">
+            <a href="${waymarkedUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-purple" style="padding:4px 9px;font-size:10px;text-decoration:none;">Waymarked Trails</a>
+            <a href="${stravaUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-soft" style="padding:4px 9px;font-size:10px;text-decoration:none;color:#fc4c02;background:#fff7ed;">Strava</a>
+            <a href="${komootUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-soft" style="padding:4px 9px;font-size:10px;text-decoration:none;color:#15803d;background:#f0fdf4;">Komoot</a>
+            <a href="${garminUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-soft" style="padding:4px 9px;font-size:10px;text-decoration:none;color:#0369a1;background:#f0f9ff;">Garmin</a>
+          </div>
+        `;
+      };
+
+      renderHTML(null);
+      cardEl.classList.remove('hidden');
+
+      L.popup({ maxWidth: 300 })
+        .setLatLng(mid)
+        .setContent(`
+          <div style="font-size:12px;line-height:1.45;min-width:215px;">
+            <strong style="color:#6d28d9;font-size:13px;">${metaObj.name}</strong><br/>
+            <span>Réseau : ${metaObj.network || 'Véloroute'}</span><br/>
+            <span>Distance : <strong>${(totalM / 1000).toFixed(1)} km</strong></span><br/>
+            <span>Revêtement : ${metaObj.surface || 'Cyclable'}</span><br/>
+            <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">
+              <a href="${waymarkedUrl}" target="_blank" rel="noopener noreferrer" style="color:#6d28d9;font-weight:700;text-decoration:none;">Waymarked</a>
+              <a href="${stravaUrl}" target="_blank" rel="noopener noreferrer" style="color:#fc4c02;font-weight:700;text-decoration:none;">Strava</a>
+              <a href="${komootUrl}" target="_blank" rel="noopener noreferrer" style="color:#15803d;font-weight:700;text-decoration:none;">Komoot</a>
+            </div>
+          </div>
+        `)
+        .openOn(map);
+
+      if (pts.length >= 2) {
+        const enriched = await enrichRouteData(pts, totalM, metaObj.name);
+        updateStatsUI(enriched);
+        renderHTML(enriched);
+      }
+    }
+
+    async function selectCatalogVeloroute(routeItem, fitMap = true) {
+      state.selectedRouteId = routeItem.id;
+      renderVisibleVeloroutesSidebar();
+      setStatus(`Chargement du tracé précis : ${routeItem.name}...`);
+
+      // 1. Affichage immédiat du tracé de référence du catalogue (garanti sans attente)
+      let activeCoords = routeItem.waypoints;
+      let distM = 0;
+
+      // 2. Routage vélo réel entre les étapes de la véloroute via OSRM pour épouser parfaitement les pistes cyclables
+      const routed = await fetchOsrmRoute(routeItem.waypoints, 'bike');
+      if (routed && routed.coords && routed.coords.length >= 2) {
+        activeCoords = routed.coords;
+        distM = routed.distanceMeters;
+      }
+
+      const metaObj = {
+        id: routeItem.id,
+        ref: routeItem.ref,
+        name: routeItem.name,
+        network: routeItem.network,
+        surface: routeItem.surface,
+        color: routeItem.color,
+        coords2d: activeCoords,
+        distanceMeters: distM
+      };
+
+      drawHighlightedVelorouteSegments([activeCoords], routeItem.color, routeItem.name, metaObj, fitMap);
+      await openVelorouteSheet(metaObj);
+      setStatus(`Véloroute active : ${routeItem.name} (${(distM / 1000).toFixed(1)} km).`);
+    }
+
+    async function searchAndTraceAnyEuropeanRoute(queryText) {
+      const q = (queryText || '').trim();
+      if (!q) return;
+
+      // Vérifier d'abord dans le catalogue intégré (V52, EV6, EV1, EV17, EV15, EV3, EV4, AVLP, V80...)
+      const qUpper = q.toUpperCase();
+      const catMatch = EUROPEAN_VELOROUTES_CATALOG.find(r =>
+        r.id.toUpperCase() === qUpper ||
+        r.ref.toUpperCase() === qUpper ||
+        r.name.toUpperCase().includes(qUpper)
+      );
+      if (catMatch) {
+        await selectCatalogVeloroute(catMatch, true);
+        return;
+      }
+
+      setStatus(`Recherche en direct de la véloroute « ${q} » en Europe...`);
+
+      // Interroger l'API Waymarked Trails Cycling (officielle pour toutes les véloroutes d'Europe)
+      try {
+        const wmRes = await fetchWithTimeout(`https://cycling.waymarkedtrails.org/api/v1/list/search?query=${encodeURIComponent(q)}&limit=5`, {}, 7500);
+        if (wmRes.ok) {
+          const wmData = await wmRes.json();
+          const results = wmData.results || [];
+          if (results.length > 0) {
+            const best = results[0];
+            const detailsRes = await fetchWithTimeout(`https://cycling.waymarkedtrails.org/api/v1/details/relation/${best.id}`, {}, 8500);
+            if (detailsRes.ok) {
+              const details = await detailsRes.json();
+              const mapBounds = map.getBounds();
+              const bbox = Array.isArray(details.bbox)
+                ? details.bbox.join(',')
+                : getWebMercatorBbox([
+                    [mapBounds.getSouth(), mapBounds.getWest()],
+                    [mapBounds.getNorth(), mapBounds.getEast()]
+                  ]);
+              const features = await fetchWaymarkedRouteSegments([best.id], bbox);
+              const segments = features.flatMap(feature =>
+                getWaymarkedLineStrings(feature.geometry).map(line => line.map(webMercatorToLatLng))
+              );
+              if (segments.some(segment => segment.length >= 2)) {
+                const validSegments = segments.filter(segment => segment.length >= 2);
+                const flatPts = validSegments.flat();
+                const displayName = best.ref ? `${best.ref} — ${best.name || 'Véloroute'}` : (best.name || q);
+                const metaObj = {
+                  id: `wm-${best.id}`,
+                  ref: best.ref || q,
+                  name: displayName,
+                  network: best.group || 'Réseau cyclable européen (Waymarked Trails)',
+                  surface: 'Voie cyclable balisée',
+                  color: '#7c3aed',
+                  coords2d: flatPts
+                };
+                drawHighlightedVelorouteSegments(validSegments, '#7c3aed', displayName, metaObj, true);
+                await openVelorouteSheet(metaObj);
+                setStatus(`Véloroute trouvée et tracée : ${displayName}.`);
+                return;
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Fallback Overpass par ref ou nom dans la vue actuelle
+      const c = map.getCenter();
+      const safeQuery = escapeOverpassRegex(q);
+      const ql = `[out:json][timeout:14];(relation["route"="bicycle"]["ref"~"^${safeQuery}$",i](around:60000,${c.lat},${c.lng});relation["route"="bicycle"]["name"~"${safeQuery}",i](around:60000,${c.lat},${c.lng}););out body geom;`;
+      const elems = await queryOverpass(ql, false);
+      if (elems.length > 0) {
+        const segments = [];
+        const tags = elems[0].tags || {};
+        elems.forEach(el => {
+          if (Array.isArray(el.members)) {
+            el.members.forEach(m => {
+              if (Array.isArray(m.geometry) && m.geometry.length >= 2) {
+                segments.push(m.geometry.map(g => [g.lat, g.lon]));
+              }
+            });
+          } else if (Array.isArray(el.geometry) && el.geometry.length >= 2) {
+            segments.push(el.geometry.map(g => [g.lat, g.lon]));
+          }
+        });
+        if (segments.length > 0) {
+          const flatPts = segments.flat();
+          const displayName = tags.name || tags.ref || q;
+          const metaObj = {
+            id: `osm-${elems[0].id}`,
+            ref: tags.ref || q,
+            name: displayName,
+            network: tags.network || 'Véloroute européenne',
+            surface: tags.surface || 'Cyclable',
+            color: '#7c3aed',
+            coords2d: flatPts
+          };
+          drawHighlightedVelorouteSegments(segments, '#7c3aed', displayName, metaObj, true);
+          await openVelorouteSheet(metaObj);
+          setStatus(`Véloroute trouvée : ${displayName}.`);
+          return;
+        }
+      }
+
+      setStatus(`Aucune véloroute nommée « ${q} » trouvée. Essayez V52, EV6, EV1, EV17, EV15 ou déplacez la carte.`);
+    }
+
+    // Afficher toutes les véloroutes du catalogue sur la carte en permanence (cliquables)
+    function renderBaseCatalogPolylines() {
+      catalogLayerGroup.clearLayers();
+      EUROPEAN_VELOROUTES_CATALOG.forEach(item => {
+        const line = L.polyline(item.waypoints, {
+          color: item.color,
+          pane: 'veloroutesPane',
+          weight: 4,
+          opacity: 0.65,
+          dashArray: '8, 6',
+          interactive: true
+        }).bindTooltip(`${item.name} — Cliquer pour charger et afficher le tracé complet`);
+
+        const hit = L.polyline(item.waypoints, {
+          color: item.color,
+          pane: 'veloroutesPane',
+          weight: 26,
+          opacity: 0.01,
+          interactive: true
+        }).bindTooltip(`${item.name} — Cliquer pour charger`);
+
+        const clickHandler = (ev) => {
+          if (ev && ev.latlng) streetViewTarget = ev.latlng;
+          if (handleDrawingPolylineClick(ev)) return;
+          if (ev && ev.originalEvent) ev.originalEvent.stopPropagation();
+          selectCatalogVeloroute(item, false);
+        };
+
+        line.on('click', clickHandler);
+        hit.on('click', clickHandler);
+        line.addTo(catalogLayerGroup);
+        hit.addTo(catalogLayerGroup);
+      });
+    }
+
+    function renderVisibleVeloroutesSidebar() {
+      const listEl = document.getElementById('visible-veloroutes-list');
+      const badgeEl = document.getElementById('veloroute-count-badge');
+      if (!listEl) return;
+
+      const combined = [...EUROPEAN_VELOROUTES_CATALOG];
+      state.loadedRoutes.forEach(lr => {
+        if (!combined.some(c => c.id === lr.id)) combined.push(lr);
+      });
+
+      if (badgeEl) badgeEl.textContent = `${combined.length} véloroutes`;
+      listEl.innerHTML = '';
+
+      combined.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'route-card' + (state.selectedRouteId === item.id ? ' selected' : '');
+        div.innerHTML = `
+          <div class="row-between">
+            <span style="font-weight:700;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              <span class="dot" style="background:${item.color || '#7c3aed'};"></span>${item.name}
+            </span>
+            <span style="font-size:10px;font-weight:700;color:#6d28d9;white-space:nowrap;">Tracer →</span>
+          </div>
+          <div class="muted-xs" style="margin-top:2px;">${item.network}</div>
+        `;
+        div.addEventListener('click', () => {
+          if (item.waypoints) {
+            selectCatalogVeloroute(item, true);
+          } else if (item.segments) {
+            state.selectedRouteId = item.id;
+            renderVisibleVeloroutesSidebar();
+            drawHighlightedVelorouteSegments(item.segments, item.color || '#7c3aed', item.name, item, true);
+            openVelorouteSheet(item);
+          }
+        });
+        listEl.appendChild(div);
+      });
+    }
+
+    // Détection dynamique des véloroutes présentes dans la fenêtre de carte (API Waymarked Trails + Overpass)
+    let liveScanTimer = null;
+    async function scanVeloroutesInCurrentViewport() {
+      const zoom = map.getZoom();
+      if (zoom < 7) return;
+      const b = map.getBounds();
+      const bbox = getWebMercatorBbox([
+        [b.getSouth(), b.getWest()],
+        [b.getNorth(), b.getEast()]
+      ]);
+      const query = new URLSearchParams({ bbox, limit: '12' });
+
+      try {
+        const res = await fetchWithTimeout(`https://cycling.waymarkedtrails.org/api/v1/list/by_area?${query.toString()}`, {}, 3500);
+        if (res.ok) {
+          const data = await res.json();
+          const results = data.results || [];
+          const dynamicItems = [];
+          for (const r of results.slice(0, 12)) {
+            const name = r.ref ? `${r.ref} — ${r.name || 'Véloroute'}` : (r.name || `Véloroute #${r.id}`);
+            dynamicItems.push({
+              id: `wm-${r.id}`,
+              wmRelationId: r.id,
+              ref: r.ref || '',
+              name,
+              network: r.group ? `Réseau ${r.group.toUpperCase()}` : 'Véloroute européenne',
+              surface: 'Voie cyclable balisée',
+              color: '#7c3aed',
+              loadOnDemand: true
+            });
+          }
+          if (dynamicItems.length > 0) {
+            state.loadedRoutes = dynamicItems;
+            renderVisibleVeloroutesSidebarWithDynamic();
+          }
+        }
+      } catch (_) {}
+    }
+
+    function renderVisibleVeloroutesSidebarWithDynamic() {
+      const listEl = document.getElementById('visible-veloroutes-list');
+      const badgeEl = document.getElementById('veloroute-count-badge');
+      if (!listEl) return;
+
+      const combined = [...state.loadedRoutes, ...EUROPEAN_VELOROUTES_CATALOG];
+      if (badgeEl) badgeEl.textContent = `${combined.length} véloroutes`;
+      listEl.innerHTML = '';
+
+      combined.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'route-card' + (state.selectedRouteId === item.id ? ' selected' : '');
+        div.innerHTML = `
+          <div class="row-between">
+            <span style="font-weight:700;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              <span class="dot" style="background:${item.color || '#7c3aed'};"></span>${item.name}
+            </span>
+            <span style="font-size:10px;font-weight:700;color:#6d28d9;white-space:nowrap;">Afficher →</span>
+          </div>
+          <div class="muted-xs" style="margin-top:2px;">${item.network}</div>
+        `;
+        div.addEventListener('click', async () => {
+          if (item.waypoints) {
+            await selectCatalogVeloroute(item, true);
+          } else if (item.wmRelationId) {
+            state.selectedRouteId = item.id;
+            renderVisibleVeloroutesSidebarWithDynamic();
+            setStatus(`Téléchargement du tracé complet : ${item.name}...`);
+            try {
+              const detailsRes = await fetchWithTimeout(`https://cycling.waymarkedtrails.org/api/v1/details/relation/${item.wmRelationId}`, {}, 8500);
+              if (!detailsRes.ok) throw new Error(`Waymarked Trails a répondu ${detailsRes.status}.`);
+              const details = await detailsRes.json();
+              const bounds = map.getBounds();
+              const bbox = Array.isArray(details.bbox)
+                ? details.bbox.join(',')
+                : getWebMercatorBbox([
+                    [bounds.getSouth(), bounds.getWest()],
+                    [bounds.getNorth(), bounds.getEast()]
+                  ]);
+              const features = await fetchWaymarkedRouteSegments([item.wmRelationId], bbox);
+              const segments = features.flatMap(feature =>
+                getWaymarkedLineStrings(feature.geometry).map(line => line.map(webMercatorToLatLng))
+              ).filter(line => line.length >= 2);
+              if (!segments.length) throw new Error('Aucun segment géométrique retourné.');
+              item.coords2d = segments.flat();
+              drawHighlightedVelorouteSegments(segments, '#7c3aed', item.name, item, true);
+              await openVelorouteSheet(item);
+              setStatus(`Véloroute affichée : ${item.name}.`);
+              return;
+            } catch (_) {}
+            setStatus(`Impossible de charger la géométrie complète de ${item.name}.`);
+          }
+        });
+        listEl.appendChild(div);
+      });
+    }
+
+    // =========================================================================
+    // 3. RECHERCHE PAR CLIC SUR LA CARTE (INSPECTION DE LA VÉLOROUTE SOUS LE CURSEUR)
+    // =========================================================================
+    const clickedRouteMarkersGroup = L.layerGroup().addTo(map);
+    let clickInspectionRequestId = 0;
+
+    async function inspectVelorouteAtClick(lat, lng) {
+      const requestId = ++clickInspectionRequestId;
+      map.closePopup();
+      const loadingMessage = document.createElement('div');
+      loadingMessage.textContent = 'Recherche des voies et itinéraires cyclables à proximité...';
+      const loadingPopup = L.popup({ maxWidth: 300 })
+        .setLatLng([lat, lng])
+        .setContent(loadingMessage);
+      loadingPopup.openOn(map);
+      setStatus(`Détection des véloroutes (V30, V32, V16, AV, V33, EV3...) à ${lat.toFixed(4)}, ${lng.toFixed(4)}...`);
+      clickedRouteMarkersGroup.clearLayers();
+
+      // 1) Requête Waymarked Trails autour du clic pour récupérer les relations cliquables (ex: V30, V32, V16, AV, V33...)
+      const d = 0.015;
+      const bbox = getWebMercatorBbox([
+        [lat - d, lng - d],
+        [lat + d, lng + d]
+      ]);
+      const query = new URLSearchParams({ bbox, limit: '10' });
+      let wmMatches = [];
+      let waymarkedUnavailable = false;
+      try {
+        const res = await fetchWithTimeout(`https://cycling.waymarkedtrails.org/api/v1/list/by_area?${query.toString()}`, {}, 6000);
+        if (res.ok) {
+          const data = await res.json();
+          wmMatches = Array.isArray(data.results) ? data.results : [];
+        } else {
+          waymarkedUnavailable = true;
+        }
+      } catch (_) {
+        waymarkedUnavailable = true;
+      }
+      if (requestId !== clickInspectionRequestId) return;
+
+      if (wmMatches.length > 0) {
+        const chosen = wmMatches[0];
+        const title = chosen.ref ? `${chosen.ref} — ${chosen.name || 'Véloroute'}` : (chosen.name || `Véloroute #${chosen.id}`);
+        let segments = [];
+        try {
+          const detailsRes = await fetchWithTimeout(`https://cycling.waymarkedtrails.org/api/v1/details/relation/${chosen.id}`, {}, 7500);
+          if (!detailsRes.ok) throw new Error(`Waymarked Trails a répondu ${detailsRes.status}.`);
+          const details = await detailsRes.json();
+          const bbox = Array.isArray(details.bbox)
+            ? details.bbox.join(',')
+            : getWebMercatorBbox([[lat - d, lng - d], [lat + d, lng + d]]);
+          const features = await fetchWaymarkedRouteSegments([chosen.id], bbox);
+          segments = features.flatMap(feature =>
+            getWaymarkedLineStrings(feature.geometry).map(line => line.map(webMercatorToLatLng))
+          ).filter(line => line.length >= 2);
+        } catch (_) {}
+
+        const metaObj = {
+          id: `wm-${chosen.id}`,
+          ref: chosen.ref || 'N/A',
+          name: title,
+          network: chosen.group ? `Réseau ${String(chosen.group).toUpperCase()}` : 'Réseau cyclable européen',
+          surface: 'Voie cyclable balisée',
+          color: '#7c3aed',
+          coords2d: segments.flat()
+        };
+
+        if (segments.length > 0) {
+          drawHighlightedVelorouteSegments(segments, '#7c3aed', title, metaObj, false);
+        } else {
+          L.circleMarker([lat, lng], {
+            radius: 9, color: '#ffffff', weight: 2.5, fillColor: '#7c3aed', fillOpacity: 0.95
+          }).bindTooltip(title).addTo(clickedRouteMarkersGroup);
+        }
+
+        // Ajouter aussi les autres véloroutes proches dans la liste rapide si plusieurs existent
+        wmMatches.slice(0, 6).forEach((m, idx) => {
+          const mTitle = m.ref ? `${m.ref} — ${m.name || 'Véloroute'}` : (m.name || `Véloroute #${m.id}`);
+          const exists = state.loadedRoutes.some(x => x.id === `wm-${m.id}`);
+          if (!exists) {
+            state.loadedRoutes.unshift({
+              id: `wm-${m.id}`,
+              wmRelationId: m.id,
+              ref: m.ref || '',
+              name: mTitle,
+              network: m.group ? `Réseau ${String(m.group).toUpperCase()}` : 'Véloroute européenne',
+              surface: 'Voie cyclable balisée',
+              color: idx === 0 ? '#7c3aed' : '#2563eb'
+            });
+          }
+        });
+        state.selectedRouteId = metaObj.id;
+        renderVisibleVeloroutesSidebarWithDynamic();
+        map.closePopup(loadingPopup);
+        await openVelorouteSheet(metaObj, { lat, lng });
+        setStatus(`Véloroute sélectionnée : ${title} (cliquable et traçable).`);
+        return;
+      }
+
+      // 2) Fallback Overpass si Waymarked Trails ne répond pas
+      const ql = `[out:json][timeout:12];(way(around:300,${lat},${lng})["highway"="cycleway"];way(around:300,${lat},${lng})["bicycle"~"^(yes|designated|permissive)$"];way(around:300,${lat},${lng})["highway"="path"]["bicycle"!="no"];way(around:300,${lat},${lng})["cycleway"];relation(around:500,${lat},${lng})["route"="bicycle"];);out body geom;`;
+      const overpassResult = await queryOverpassWithStatus(ql, null, 12000);
+      if (requestId !== clickInspectionRequestId) return;
+      const elems = overpassResult.elements || [];
+
+      if (elems.length > 0) {
+        const rel = elems.find(e => e.type === 'relation' && e.tags && e.tags.route === 'bicycle') || elems[0];
+        const tags = rel.tags || {};
+        const segments = [];
+
+        if (Array.isArray(rel.members)) {
+          rel.members.forEach(m => {
+            if (Array.isArray(m.geometry) && m.geometry.length >= 2) {
+              segments.push(m.geometry.map(g => [g.lat, g.lon]));
+            }
+          });
+        } else if (Array.isArray(rel.geometry) && rel.geometry.length >= 2) {
+          segments.push(rel.geometry.map(g => [g.lat, g.lon]));
+        }
+
+        const displayName = tags.ref && tags.name && !tags.name.includes(tags.ref)
+          ? `${tags.ref} — ${tags.name}`
+          : (tags.name || (tags.ref ? `Véloroute ${tags.ref}` : 'Piste / Voie cyclable'));
+
+        const metaObj = {
+          id: `click-${rel.id}`,
+          ref: tags.ref || 'N/A',
+          name: displayName,
+          network: tags.network ? `Réseau ${tags.network.toUpperCase()}` : 'Itinéraire cyclable',
+          surface: tags.surface || 'Cyclable',
+          color: '#7c3aed',
+          coords2d: segments.flat()
+        };
+
+        if (segments.length > 0) {
+          drawHighlightedVelorouteSegments(segments, '#7c3aed', displayName, metaObj, false);
+        }
+        map.closePopup(loadingPopup);
+        await openVelorouteSheet(metaObj, { lat, lng });
+        setStatus(`Véloroute détectée sous le clic : ${displayName}.`);
+        return;
+      }
+
+      const message = overpassResult.error
+        ? `Données cyclables temporairement inaccessibles${waymarkedUnavailable ? ' (Waymarked Trails et OpenStreetMap/Overpass)' : ' (OpenStreetMap/Overpass)'}.`
+        : 'Aucune voie cyclable identifiée à cet endroit dans OpenStreetMap.';
+      const resultMessage = document.createElement('div');
+      resultMessage.style.maxWidth = '280px';
+      const resultText = document.createElement('div');
+      resultText.textContent = `${message} Vous pouvez tout de même utiliser ce point comme étape.`;
+      const addButton = document.createElement('button');
+      addButton.type = 'button';
+      addButton.textContent = '+ Ajouter comme étape';
+      addButton.className = 'btn btn-accent';
+      addButton.style.marginTop = '8px';
+      addButton.addEventListener('click', () => {
+        const letter = String.fromCharCode(65 + state.waypoints.length);
+        state.waypoints.push({ lat, lng, name: `Point ${letter}` });
+        renderWaypoints();
+        recomputeCurrentMode();
+        map.closePopup();
+      });
+      const osmLink = document.createElement('a');
+      osmLink.href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`;
+      osmLink.target = '_blank';
+      osmLink.rel = 'noopener noreferrer';
+      osmLink.textContent = 'Ouvrir dans OpenStreetMap';
+      osmLink.className = 'btn btn-outline';
+      osmLink.style.cssText = 'margin-top:8px;margin-left:6px;padding:7px 10px;text-decoration:none;';
+      resultMessage.append(resultText, addButton, osmLink);
+      map.closePopup(loadingPopup);
+      L.popup({ maxWidth: 300 })
+        .setLatLng([lat, lng])
+        .setContent(resultMessage)
+        .openOn(map);
+      setStatus(message);
+    }
+
+    // =========================================================================
+    // 4. ÉTAPES A -> B -> C, BOUCLE AUTO & EXPLORATION LOCALE
+    // =========================================================================
+    function renderWaypoints() {
+      const listEl = document.getElementById('waypoints-list');
+      waypointsLayerGroup.clearLayers();
+      if (!state.waypoints.length) {
+        listEl.innerHTML = '<div style="color:#94a3b8;font-style:italic;">Cliquez sur la carte ou sélectionnez une véloroute ci-dessus.</div>';
+        return;
+      }
+      listEl.innerHTML = '';
+      state.waypoints.forEach((wp, index) => {
+        const letter = String.fromCharCode(65 + index);
+        const marker = L.circleMarker([wp.lat, wp.lng], {
+          radius: 8, color: '#ffffff', weight: 2,
+          fillColor: index === 0 ? '#059669' : '#2563eb', fillOpacity: 0.95
+        });
+        const tooltip = document.createElement('span');
+        tooltip.textContent = `${letter} — ${wp.name || 'Étape'}`;
+        marker.bindTooltip(tooltip).addTo(waypointsLayerGroup);
+
+        const row = document.createElement('div');
+        row.className = 'row-between';
+        row.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;';
+        const label = document.createElement('div');
+        label.style.cssText = 'display:flex;align-items:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        const badge = document.createElement('span');
+        badge.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;border-radius:999px;background:#059669;color:#fff;font-size:10px;font-weight:700;margin-right:6px;';
+        badge.textContent = letter;
+        const name = document.createElement('span');
+        name.style.fontWeight = '600';
+        name.textContent = wp.name || `Point ${letter}`;
+        label.append(badge, name);
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.dataset.removeWp = String(index);
+        removeButton.style.cssText = 'flex:none;border:none;background:none;color:#e11d48;font-size:11px;cursor:pointer;';
+        removeButton.textContent = 'Retirer';
+        row.append(label, removeButton);
+        listEl.appendChild(row);
+      });
+      listEl.querySelectorAll('[data-remove-wp]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.waypoints.splice(Number(btn.getAttribute('data-remove-wp')), 1);
+          renderWaypoints();
+          recomputeCurrentMode();
+        });
+      });
+    }
+
+    function offsetLatLng(lat, lng, distKm, bearingDeg) {
+      const R = 6371;
+      const brng = bearingDeg * Math.PI / 180;
+      const lat1 = lat * Math.PI / 180, lon1 = lng * Math.PI / 180;
+      const d = distKm / R;
+      const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng));
+      const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+      return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
+    }
+
+    let localCircuitRequestId = 0;
+    async function queryOverpassWithStatus(ql, onAttempt = null, timeoutMs = 9000) {
+      let lastError = 'Aucun serveur Overpass disponible.';
+      for (let index = 0; index < OVERPASS_ENDPOINTS.length; index++) {
+        const endpoint = OVERPASS_ENDPOINTS[index];
+        if (typeof onAttempt === 'function') onAttempt(index + 1);
+        try {
+          let res = await fetchWithTimeout(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: 'data=' + encodeURIComponent(ql)
+          }, timeoutMs);
+          if (!res.ok) {
+            lastError = `Le serveur Overpass a répondu ${res.status}.`;
+            continue;
+          }
+          const data = await res.json();
+          if (data && Array.isArray(data.elements)) return { elements: data.elements, error: null };
+          lastError = 'La réponse Overpass est invalide.';
+        } catch (error) {
+          lastError = error && error.name === 'AbortError'
+            ? 'La recherche Overpass a expiré.'
+            : 'Impossible de joindre les serveurs Overpass.';
+        }
+      }
+      return { elements: null, error: lastError };
+    }
+
+    let greenwaysRequestId = 0;
+    let greenwaysSearchTimer = null;
+
+    function rebuildGreenwaySnapIndex() {
+      projectedGreenwaysSnapSegments = greenwaysSnapSegments.map(coords =>
+        coords.map(([lat, lng]) => map.latLngToContainerPoint([lat, lng]))
+      );
+    }
+
+    function findNearestCyclingPathPoint(latlng, maxDistancePx = 26) {
+      const cursor = map.latLngToContainerPoint(latlng);
+      let nearest = null;
+      projectedGreenwaysSnapSegments.forEach((segment, segmentIndex) => {
+        for (let i = 1; i < segment.length; i++) {
+          const a = segment[i - 1];
+          const b = segment[i];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const lengthSquared = dx * dx + dy * dy;
+          const ratio = lengthSquared
+            ? Math.max(0, Math.min(1, ((cursor.x - a.x) * dx + (cursor.y - a.y) * dy) / lengthSquared))
+            : 0;
+          const x = a.x + ratio * dx;
+          const y = a.y + ratio * dy;
+          const distance = Math.hypot(cursor.x - x, cursor.y - y);
+          if (distance <= maxDistancePx && (!nearest || distance < nearest.distance)) {
+            nearest = {
+              latlng: map.containerPointToLatLng(L.point(x, y)),
+              distance,
+              segmentIndex
+            };
+          }
+        }
+      });
+      return nearest;
+    }
+
+    function addCustomDrawPoint(latlng) {
+      if (state.planMode !== 'draw') return;
+      pushHistorySnapshot();
+      const snap = findNearestCyclingPathPoint(latlng);
+      const point = snap ? snap.latlng : latlng;
+      state.customDrawPoints.push({ lat: point.lat, lng: point.lng, snapped: Boolean(snap) });
+      const snapStatus = document.getElementById('draw-snap-status');
+      if (snapStatus) {
+        snapStatus.textContent = snap
+          ? 'Étape accrochée à une voie cyclable'
+          : 'Pas de voie chargée à cet endroit : étape placée au curseur';
+      }
+      updateCustomDrawnRoute();
+    }
+
+    function handleDrawingPolylineClick(event) {
+      if (state.planMode !== 'draw') return false;
+      streetViewTarget = event.latlng;
+      if (event.originalEvent) {
+        if (drawWaypointEvents.has(event.originalEvent)) return true;
+        drawWaypointEvents.add(event.originalEvent);
+        L.DomEvent.stopPropagation(event.originalEvent);
+      }
+      addCustomDrawPoint(event.latlng);
+      map.closePopup();
+      return true;
+    }
+
+    map.on('mousemove', (event) => {
+      if (state.planMode !== 'draw' || drawPointerFrame) return;
+      drawPointerFrame = requestAnimationFrame(() => {
+        drawPointerFrame = 0;
+        const snap = findNearestCyclingPathPoint(event.latlng);
+        const mapContainer = map.getContainer();
+        const snapStatus = document.getElementById('draw-snap-status');
+        if (snap) {
+          if (!drawSnapMarker) {
+            drawSnapMarker = L.circleMarker(snap.latlng, {
+              pane: 'drawSnapPane',
+              radius: 8,
+              color: '#0f172a',
+              weight: 3,
+              fillColor: '#f97316',
+              fillOpacity: 1,
+              interactive: false
+            }).addTo(map);
+          } else {
+            drawSnapMarker.setLatLng(snap.latlng);
+          }
+          mapContainer.style.cursor = 'pointer';
+          if (snapStatus) snapStatus.textContent = 'Accroché à la piste — cliquez pour ajouter une étape';
+        } else {
+          if (drawSnapMarker) {
+            map.removeLayer(drawSnapMarker);
+            drawSnapMarker = null;
+          }
+          mapContainer.style.cursor = 'crosshair';
+          if (snapStatus) {
+            snapStatus.textContent = greenwaysLoadFailed
+              ? 'Réseau OSM indisponible — étape libre, puis routage vélo'
+              : (greenwaysSnapSegments.length
+                ? 'Aucune voie proche — zoomez ou placez une étape libre'
+                : (greenwaysLoaded
+                  ? 'Aucune géométrie cyclable chargée dans cette zone'
+                  : 'Chargement des voies cyclables pour l’accrochage...'));
+          }
+        }
+      });
+    });
+
+    async function loadVisibleGreenways() {
+      if (!state.greenwaysEnabled) return;
+      if (map.getZoom() < 9) {
+        setStatus('Zoomez sur une zone précise pour afficher les voies vertes OpenStreetMap.');
+        return 0;
+      }
+      const requestId = ++greenwaysRequestId;
+      greenwaysLoadFailed = false;
+      greenwaysLoaded = false;
+      const center = map.getCenter();
+      const lat = center.lat.toFixed(5);
+      const lng = center.lng.toFixed(5);
+      const radiusM = map.getZoom() >= 13 ? 6000 : 10000;
+
+      setStatus('Recherche des voies vertes autour de la zone affichée...');
+      const ql = `[out:json][timeout:8];(way(around:${radiusM},${lat},${lng})["highway"="cycleway"];way(around:${radiusM},${lat},${lng})["bicycle"~"^(yes|designated|permissive)$"];way(around:${radiusM},${lat},${lng})["highway"="path"]["bicycle"!="no"];way(around:${radiusM},${lat},${lng})["cycleway"];relation(around:${radiusM},${lat},${lng})["route"="bicycle"];);out body geom;`;
+      const result = await queryOverpassWithStatus(ql, null, 2800);
+      if (requestId !== greenwaysRequestId || !state.greenwaysEnabled) return;
+
+      if (!result.elements) {
+        greenwaysLoadFailed = true;
+        setStatus(`${result.error} Activez une carte locale puis réessayez.`);
+        return 0;
+      }
+
+      greenwaysLayerGroup.clearLayers();
+      greenwaysSnapSegments = [];
+      projectedGreenwaysSnapSegments = [];
+      greenwaysLoaded = false;
+      const seen = new Set();
+      let count = 0;
+      for (const el of result.elements) {
+        let segments = [];
+        if (el.type === 'way' && Array.isArray(el.geometry) && el.geometry.length >= 2) {
+          segments = [el.geometry.map(p => [p.lat, p.lon])];
+        } else if (Array.isArray(el.members)) {
+          segments = el.members
+            .filter(m => m.type === 'way' && Array.isArray(m.geometry) && m.geometry.length >= 2)
+            .map(m => m.geometry.map(p => [p.lat, p.lon]));
+        }
+        segments.forEach((coords, segmentIndex) => {
+          const key = `${el.type}-${el.id}-${segmentIndex}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          greenwaysSnapSegments.push(coords);
+          const tags = el.tags || {};
+          const isBicycleRoute = el.type === 'relation' && tags.route === 'bicycle';
+          const hasCyclewayTag = Boolean(tags.cycleway || tags['cycleway:left'] || tags['cycleway:right'] || tags['cycleway:both']);
+          const featureType = isBicycleRoute
+            ? 'Itinéraire cyclable'
+            : (tags.highway === 'cycleway'
+              ? 'Piste cyclable'
+              : (hasCyclewayTag
+                ? 'Aménagement cyclable'
+                : (tags.highway === 'path' ? 'Voie cyclable' : 'Voie autorisée aux vélos')));
+          const name = tags.name || tags.ref || featureType;
+          const lineColor = isBicycleRoute ? '#7c3aed' : (tags.highway === 'cycleway' || hasCyclewayTag ? '#2563eb' : '#16a34a');
+          const casingLine = L.polyline(coords, {
+            pane: 'cyclingInfrastructurePane',
+            color: '#ffffff',
+            weight: 13,
+            opacity: 1,
+            interactive: false,
+            lineCap: 'round',
+            lineJoin: 'round'
+          });
+          const visibleLine = L.polyline(coords, {
+            pane: 'cyclingInfrastructurePane',
+            color: lineColor,
+            weight: 8,
+            opacity: 1,
+            interactive: true,
+            lineCap: 'round',
+            lineJoin: 'round'
+          });
+          const hitLine = L.polyline(coords, {
+            pane: 'cyclingInfrastructurePane',
+            color: '#ffffff',
+            weight: 28,
+            opacity: 0.01,
+            interactive: true
+          });
+          const popup = document.createElement('div');
+          const title = document.createElement('strong');
+          title.textContent = name;
+          const details = document.createElement('div');
+          details.textContent = [
+            tags.highway || (el.type === 'relation' ? 'Itinéraire cyclable' : 'Voie cyclable'),
+            tags.surface && `Revêtement : ${tags.surface}`,
+            tags.bicycle && `Vélo : ${tags.bicycle}`,
+            (tags.cycleway || tags['cycleway:left'] || tags['cycleway:right'] || tags['cycleway:both']) &&
+              `Aménagement : ${tags.cycleway || tags['cycleway:left'] || tags['cycleway:right'] || tags['cycleway:both']}`,
+            tags.network && `Réseau : ${tags.network}`,
+            `OpenStreetMap ${el.type}/${el.id}`
+          ].filter(Boolean).join(' · ');
+          popup.append(title, details);
+          visibleLine.bindTooltip(`${featureType} — ${name}`, { sticky: true });
+          visibleLine.bindPopup(popup);
+          hitLine.bindPopup(popup);
+          const stopMapClick = (event) => {
+            if (handleDrawingPolylineClick(event)) return;
+            if (event.originalEvent) L.DomEvent.stopPropagation(event.originalEvent);
+          };
+          visibleLine.on('click', stopMapClick);
+          hitLine.on('click', stopMapClick);
+          casingLine.addTo(greenwaysLayerGroup);
+          visibleLine.addTo(greenwaysLayerGroup);
+          hitLine.addTo(greenwaysLayerGroup);
+          count += 1;
+        });
+      }
+
+      rebuildGreenwaySnapIndex();
+      greenwaysLoaded = true;
+      state.greenwaysCount = count;
+      setStatus(count
+        ? `${count} ${count === 1 ? 'tracé cyclable affiché' : 'tracés cyclables affichés'}. Vert : voie cyclable, bleu : piste, violet : itinéraire.`
+        : 'Aucune voie verte détectée dans cette zone. Zoomez pour affiner la recherche.');
+      return count;
+    }
+
+    function searchNearbyCycleways() {
+      const center = map.getCenter();
+      return discoverLocalCircuits(center.lat, center.lng, state.radiusKm);
+    }
+
+    async function discoverLocalCircuits(lat, lng, radiusKm) {
+      const requestId = ++localCircuitRequestId;
+      const statusEl = document.getElementById('circuits-status');
+      const listEl = document.getElementById('circuits-list');
+      circuitsLayerGroup.clearLayers();
+      searchAreaLayerGroup.clearLayers();
+      state.circuits = [];
+      statusEl.textContent = 'Recherche...';
+      listEl.textContent = 'Recherche des aménagements cyclables OpenStreetMap...';
+
+      const center = L.latLng(lat, lng);
+      L.circle(center, {
+        radius: radiusKm * 1000,
+        color: '#059669',
+        weight: 2,
+        dashArray: '6, 6',
+        fillColor: '#34d399',
+        fillOpacity: 0.08
+      }).bindTooltip(`Zone de recherche : ${radiusKm} km`).addTo(searchAreaLayerGroup);
+
+      const radiusM = Math.round(radiusKm * 1000);
+      const ql = `[out:json][timeout:8];(way(around:${radiusM},${lat},${lng})["highway"="cycleway"];way(around:${radiusM},${lat},${lng})["cycleway"];way(around:${radiusM},${lat},${lng})["bicycle"~"^(yes|designated|permissive)$"];relation(around:${radiusM},${lat},${lng})["route"="bicycle"];);out tags geom;`;
+      const result = await queryOverpassWithStatus(ql, null, 2800);
+      if (requestId !== localCircuitRequestId) return;
+      if (!result.elements) {
+        statusEl.textContent = 'Erreur';
+        listEl.textContent = result.error;
+        setStatus(`${result.error} Vérifiez votre connexion puis relancez la recherche.`);
+        return;
+      }
+
+      const palette = ['#059669', '#2563eb', '#d97706', '#7c3aed', '#db2777'];
+      const found = [];
+
+      for (const el of result.elements) {
+        const tags = el.tags || {};
+        const geometries = el.type === 'way'
+          ? [el.geometry]
+          : (Array.isArray(el.members)
+            ? el.members.filter(member => member.type === 'way').map(member => member.geometry)
+            : []);
+        const segments = geometries
+          .filter(geometry => Array.isArray(geometry) && geometry.length >= 2)
+          .map(geometry => pruneRouteSpikesAndUTurns(geometry.map(point => [point.lat, point.lon])));
+        if (!segments.length) continue;
+        let distanceMeters = 0;
+        segments.forEach(coords => {
+          for (let i = 1; i < coords.length; i++) {
+            distanceMeters += haversineMeters(coords[i - 1], coords[i]);
+          }
+        });
+        found.push({
+          id: el.id,
+          name: tags.name || tags.ref || (el.type === 'relation' ? 'Itinéraire cyclable sans nom' : 'Aménagement cyclable'),
+          color: palette[found.length % palette.length],
+          segments,
+          distanceMeters,
+          network: tags.network || 'OpenStreetMap',
+          surface: tags.surface || 'Non renseigné',
+          tags
+        });
+      }
+
+      if (requestId !== localCircuitRequestId) return;
+      state.circuits = found;
+      statusEl.textContent = `${found.length} aménagement(s)`;
+      listEl.innerHTML = '';
+      if (!found.length) {
+        listEl.textContent = 'Aucun aménagement cyclable cartographié dans ce périmètre.';
+        setStatus(`Aucun aménagement cyclable trouvé dans un rayon de ${radiusKm} km.`);
+        return;
+      }
+
+      found.forEach((c) => {
+        const lines = c.segments.map(segment =>
+          L.polyline(segment, { color: c.color, weight: 4, opacity: 0.9, interactive: true }).addTo(circuitsLayerGroup)
+        );
+        lines.forEach(line => {
+          const popup = document.createElement('div');
+          const title = document.createElement('strong');
+          title.textContent = c.name;
+          const details = document.createElement('div');
+          details.textContent = `${(c.distanceMeters / 1000).toFixed(2)} km · ${c.surface} · OSM ${c.id}`;
+          popup.append(title, details);
+          line.bindPopup(popup);
+          line.on('click', (event) => {
+            if (event.latlng) streetViewTarget = event.latlng;
+            if (handleDrawingPolylineClick(event)) return;
+            if (event.originalEvent) L.DomEvent.stopPropagation(event.originalEvent);
+          });
+        });
+
+        const row = document.createElement('div');
+        row.className = 'route-card';
+        row.textContent = `${c.name} · ${(c.distanceMeters / 1000).toFixed(2)} km`;
+        row.addEventListener('click', () => {
+          const routeLayer = L.featureGroup(lines);
+          map.fitBounds(routeLayer.getBounds(), { maxZoom: 16 });
+          lines[0].openPopup();
+        });
+        listEl.appendChild(row);
+      });
+      setStatus(`${found.length} aménagement(s) cyclable(s) OpenStreetMap trouvés dans un rayon de ${radiusKm} km. Les pistes sans étiquette vélo ne peuvent pas être détectées.`);
+    }
+
+    async function computeWaypointsRoute() {
+      if (state.waypoints.length < 2) return;
+      clearRouteAlternatives();
+      setRouteDownloadProgress(8, true);
+      const requestId = routeAlternativesRequestId;
+      const waypoints = state.waypoints.map(point => ({ lat: point.lat, lng: point.lng }));
+      let markedRoute = null;
+      setStatus('Recherche d’une véloroute balisée et calcul des options...');
+      try {
+        setRouteDownloadProgress(24, true);
+        markedRoute = await findMarkedRouteForWaypoints(waypoints);
+      } catch (error) {
+        const reason = error instanceof Error ? ` (${error.message})` : '';
+        routeGuidanceMessage = `Recherche des véloroutes balisées indisponible${reason} ; le trajet sera calculé avec le profil vélo.`;
+      }
+      if (requestId !== routeAlternativesRequestId) return;
+      if (markedRoute) {
+        const routeNames = markedRoute.routes.slice(0, 3).map(route =>
+          route.ref ? `${route.ref} — ${route.name || 'Véloroute'}` : (route.name || 'Véloroute')
+        );
+        routeGuidanceMessage = `Guidage calé sur les véloroutes balisées ${routeNames.join(' → ') || 'du réseau local'} lorsque disponibles.`;
+      } else if (!routeGuidanceMessage) {
+        routeGuidanceMessage = 'Aucune véloroute balisée continue trouvée près des étapes ; le trajet utilise le profil vélo.';
+      }
+      const routingWaypoints = markedRoute
+        ? markedRoute.routingWaypoints
+        : waypoints.map(point => [point.lat, point.lng]);
+      setStatus(`${routeGuidanceMessage} Calcul des options...`);
+      setRouteDownloadProgress(42, true);
+      const alternatives = await fetchOsrmRouteAlternatives(routingWaypoints, percent => {
+        setRouteDownloadProgress(percent, true);
+      });
+      if (requestId !== routeAlternativesRequestId) return;
+      if (!alternatives.length) {
+        setRouteDownloadProgress(0, false);
+        setStatus('Aucun itinéraire calculé. Les étapes sont conservées ; vérifiez la connexion et réessayez.');
+        return;
+      }
+      if (markedRoute) {
+        alternatives.forEach(route => {
+          route.markedRoute = markedRoute;
+        });
+      }
+      setRouteDownloadProgress(100, true);
+      routeAlternatives = alternatives;
+      selectedRouteAlternativeIndex = 0;
+      prepareRouteAlternativeEnrichments('Itinéraire A → B → C');
+      renderRouteAlternativeOptions();
+      await selectRouteAlternative(0);
+      window.setTimeout(() => setRouteDownloadProgress(0, false), 700);
+    }
+
+    const LOOP_DIRECTIONS = {
+      N: { label: 'NORD', bearing: 0, delta: 55 },
+      E: { label: 'EST', bearing: 90, delta: 55 },
+      W: { label: 'OUEST', bearing: 270, delta: 55 },
+      S: { label: 'SUD', bearing: 180, delta: 55 }
+    };
+
+    function setLoopDirectionUI(dirKey) {
+      const validKey = LOOP_DIRECTIONS[dirKey] ? dirKey : 'N';
+      state.loopDirection = validKey;
+      document.querySelectorAll('#loop-dir-buttons [data-loop-dir]').forEach(btn => {
+        const isSelected = btn.getAttribute('data-loop-dir') === validKey;
+        btn.classList.toggle('active', isSelected);
+        btn.setAttribute('aria-pressed', String(isSelected));
+      });
+    }
+
+    function buildLoopWaypoints(start, targetKm, dirKey) {
+      const dirCfg = LOOP_DIRECTIONS[dirKey] || LOOP_DIRECTIONS.N;
+      const baseBearing = dirCfg.bearing;
+      const spread = dirCfg.delta;
+      // Rayon approximatif pour obtenir une boucle fermée proche de la distance souhaitée
+      const radiusKm = Math.max(1.8, (targetKm / (2 * Math.PI)) * 0.92);
+      const b1 = (baseBearing - spread + 360) % 360;
+      const b2 = baseBearing;
+      const b3 = (baseBearing + spread) % 360;
+      const p1 = offsetLatLng(start.lat, start.lng, radiusKm * 0.85, b1);
+      const p2 = offsetLatLng(start.lat, start.lng, radiusKm * 1.15, b2);
+      const p3 = offsetLatLng(start.lat, start.lng, radiusKm * 0.85, b3);
+      return [[start.lat, start.lng], p1, p2, p3, [start.lat, start.lng]];
+    }
+
+    async function computeLoopFromA() {
+      if (!state.waypoints.length) {
+        clearRouteAlternatives();
+        updateStatsUI(null);
+        setStatus('Mode Boucle auto : cliquez sur la carte pour placer le point de départ A, puis choisissez NORD, EST, OUEST ou SUD.');
+        return;
+      }
+      clearRouteAlternatives();
+      routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
+      setRouteDownloadProgress(15, true);
+      const requestId = routeAlternativesRequestId;
+      const start = state.waypoints[0];
+      const dirCfg = LOOP_DIRECTIONS[state.loopDirection] || LOOP_DIRECTIONS.N;
+      const practiceLabel = {
+        road: 'Cyclotourisme (goudron & voies calmes, peu de voitures)',
+        gravel: 'Gravel (chemins, pistes & routes peu fréquentées)',
+        vtc: 'VTC / Balade (voies vertes, pistes & routes calmes)'
+      }[state.practice] || 'VTC / Balade';
+
+      const loopCoords = buildLoopWaypoints(start, state.loopKm, state.loopDirection);
+      // Aperçu immédiat de la zone de boucle sur la carte pendant le calcul
+      L.polyline(loopCoords, {
+        color: '#059669',
+        weight: 4,
+        opacity: 0.55,
+        dashArray: '8, 8'
+      }).addTo(routeLayerGroup);
+      const previewBounds = L.latLngBounds(loopCoords);
+      if (previewBounds.isValid()) {
+        map.fitBounds(previewBounds, { padding: [45, 45], maxZoom: 13 });
+      }
+
+      routeGuidanceMessage = `Boucle ${dirCfg.label} (~${state.loopKm} km) · ${practiceLabel} · privilégie pistes cyclables, voies vertes et axes à faible trafic automobile.`;
+      setStatus(`Calcul de la boucle ${dirCfg.label} (~${state.loopKm} km) en ${practiceLabel}...`);
+      setRouteDownloadProgress(40, true);
+
+      let alternatives = await fetchOsrmRouteAlternatives(loopCoords, percent => {
+        setRouteDownloadProgress(percent, true);
+      });
+
+      // Repli avec un rayon légèrement resserré si le routage sur le premier cercle échoue
+      if (!alternatives.length && requestId === routeAlternativesRequestId) {
+        const tighterCoords = buildLoopWaypoints(start, Math.max(10, state.loopKm * 0.72), state.loopDirection);
+        alternatives = await fetchOsrmRouteAlternatives(tighterCoords, percent => {
+          setRouteDownloadProgress(percent, true);
+        });
+      }
+
+      if (requestId !== routeAlternativesRequestId) return;
+      if (!alternatives.length) {
+        routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
+        setRouteDownloadProgress(0, false);
+        setStatus(`Impossible de calculer la boucle ${dirCfg.label} autour de ce point (serveur vélo indisponible ou zone sans route). Essayez un autre point de départ ou une autre distance.`);
+        return;
+      }
+      setRouteDownloadProgress(100, true);
+      routeAlternatives = alternatives;
+      selectedRouteAlternativeIndex = 0;
+      prepareRouteAlternativeEnrichments(`Boucle ${dirCfg.label} (${practiceLabel})`);
+      renderRouteAlternativeOptions();
+      await selectRouteAlternative(0);
+      window.setTimeout(() => setRouteDownloadProgress(0, false), 700);
+    }
+
+    async function recomputeCurrentMode() {
+      if (!state.waypoints.length) {
+        clearRouteAlternatives();
+        routeLayerGroup.clearLayers();
+      editableRouteHandlesGroup.clearLayers();
+        circuitsLayerGroup.clearLayers();
+        if (state.planMode === 'loop') {
+          await computeLoopFromA();
+        }
+        return;
+      }
+      const first = state.waypoints[0];
+      discoverLocalCircuits(first.lat, first.lng, state.radiusKm);
+      if (state.planMode === 'abc' && state.waypoints.length >= 2) {
+        await computeWaypointsRoute();
+      } else if (state.planMode === 'loop') {
+        await computeLoopFromA();
+      } else {
+        clearRouteAlternatives();
+      }
+    }
+
+    // =========================================================================
+    // 5. LIEUX & SERVICES À LA DEMANDE
+    // =========================================================================
+    const POI_ROUTE_BUFFER_METERS = 500;
+    const POI_ROUTE_MAX_RESULTS = 200;
+
+    function buildPoiRouteMetrics(points) {
+      const cumulativeMeters = [0];
+      for (let i = 1; i < points.length; i++) {
+        cumulativeMeters.push(cumulativeMeters[i - 1] + haversineMeters(
+          [points[i - 1].lat, points[i - 1].lng],
+          [points[i].lat, points[i].lng]
+        ));
+      }
+
+      const totalMeters = cumulativeMeters[cumulativeMeters.length - 1];
+      const spacingMeters = Math.max(1000, totalMeters / 1000);
+      const searchPoints = [points[0]];
+      let segmentIndex = 1;
+      for (let targetMeters = spacingMeters; targetMeters < totalMeters; targetMeters += spacingMeters) {
+        while (segmentIndex < cumulativeMeters.length - 1 && cumulativeMeters[segmentIndex] < targetMeters) {
+          segmentIndex++;
+        }
+        const segmentMeters = cumulativeMeters[segmentIndex] - cumulativeMeters[segmentIndex - 1];
+        const ratio = segmentMeters > 0
+          ? (targetMeters - cumulativeMeters[segmentIndex - 1]) / segmentMeters
+          : 0;
+        const start = points[segmentIndex - 1];
+        const end = points[segmentIndex];
+        searchPoints.push({
+          lat: start.lat + (end.lat - start.lat) * ratio,
+          lng: start.lng + (end.lng - start.lng) * ratio
+        });
+      }
+      if (totalMeters > 0) searchPoints.push(points[points.length - 1]);
+
+      return { cumulativeMeters, searchPoints };
+    }
+
+    function findPoiRoutePosition(lat, lng, points, cumulativeMeters) {
+      const earthRadius = 6371000;
+      const radians = Math.PI / 180;
+      const latScale = Math.cos(lat * radians);
+      let nearest = null;
+
+      for (let i = 1; i < points.length; i++) {
+        const start = points[i - 1];
+        const end = points[i];
+        const startX = (start.lng - lng) * radians * earthRadius * latScale;
+        const startY = (start.lat - lat) * radians * earthRadius;
+        const endX = (end.lng - lng) * radians * earthRadius * latScale;
+        const endY = (end.lat - lat) * radians * earthRadius;
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const lengthSquared = dx * dx + dy * dy;
+        const ratio = lengthSquared
+          ? Math.max(0, Math.min(1, -(startX * dx + startY * dy) / lengthSquared))
+          : 0;
+        const distanceMeters = Math.hypot(startX + ratio * dx, startY + ratio * dy);
+        if (!nearest || distanceMeters < nearest.distanceMeters) {
+          nearest = {
+            distanceMeters,
+            alongMeters: cumulativeMeters[i - 1] +
+              (cumulativeMeters[i] - cumulativeMeters[i - 1]) * ratio
+          };
+        }
+      }
+      return nearest;
+    }
+
+    const POI_FILTERS = {
+      tourism: { label: 'À visiter', query: around => `nwr["tourism"~"attraction|viewpoint|museum|castle|monument"](${around});` },
+      water: { label: 'Eau potable', query: around => `nwr["amenity"="drinking_water"](${around});nwr["drinking_water"="yes"](${around});` },
+      restaurant: { label: 'Restaurants', query: around => `nwr["amenity"~"restaurant|cafe|fast_food|bakery"](${around});` },
+      camping: { label: 'Campings', query: around => `nwr["tourism"="camp_site"](${around});` },
+      lodging: { label: 'Accueil Vélo / Hôtels', query: around => `nwr["tourism"~"hotel|guest_house|chalet|hostel"](${around});` },
+      repair: { label: 'Réparation', query: around => `nwr["shop"="bicycle"](${around});nwr["amenity"="bicycle_repair_station"](${around});` },
+      station: { label: 'Gares', query: around => `nwr["railway"="station"](${around});` }
+    };
+
+    let poiRequestId = 0;
+    async function loadPoiCategory(catKey) {
+      const cfg = POI_FILTERS[catKey];
+      if (!cfg) return;
+      const requestId = ++poiRequestId;
+      state.activePoiCategory = catKey;
+      const mapCenter = map.getCenter();
+      const routePoints = state.activeRouteCoords.length >= 2
+        ? state.activeRouteCoords
+        : [];
+      const routeMetrics = routePoints.length ? buildPoiRouteMetrics(routePoints) : null;
+      let center;
+      if (routePoints.length) {
+        const nearest = routePoints.reduce((best, point) => {
+          const distance = haversineMeters(
+            [mapCenter.lat, mapCenter.lng],
+            [point.lat, point.lng]
+          );
+          return !best || distance < best.distance ? { point, distance } : best;
+        }, null);
+        center = [nearest.point.lat, nearest.point.lng];
+      } else if (state.waypoints.length) {
+        center = [state.waypoints[0].lat, state.waypoints[0].lng];
+      } else {
+        center = [mapCenter.lat, mapCenter.lng];
+      }
+      const radiusM = Math.round(state.radiusKm * 1000);
+      const around = routeMetrics
+        ? `around:${POI_ROUTE_BUFFER_METERS},${routeMetrics.searchPoints.map(point => `${point.lat},${point.lng}`).join(',')}`
+        : `around:${radiusM},${center[0]},${center[1]}`;
+      const maxResults = routeMetrics ? POI_ROUTE_MAX_RESULTS : 25;
+      poiLayerGroup.clearLayers();
+      const listEl = document.getElementById('poi-list');
+      listEl.textContent = routeMetrics
+        ? `Recherche : ${cfg.label} à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours...`
+        : `Recherche : ${cfg.label} dans un rayon de ${state.radiusKm} km...`;
+      const result = await queryOverpassWithStatus(
+        `[out:json][timeout:12];(${cfg.query(around)});out center ${maxResults};`,
+        attempt => {
+          if (requestId === poiRequestId && attempt > 1) {
+            listEl.textContent = `Serveur Overpass lent, nouvelle tentative ${attempt}/${OVERPASS_ENDPOINTS.length}...`;
+          }
+        },
+        14000
+      );
+      if (requestId !== poiRequestId) return;
+      listEl.innerHTML = '';
+      if (result.error) {
+        listEl.textContent = `Recherche indisponible : ${result.error}`;
+        return;
+      }
+      const elems = result.elements || [];
+      if (!elems.length) {
+        listEl.textContent = routeMetrics
+          ? `Aucun résultat « ${cfg.label} » à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours.`
+          : `Aucun résultat « ${cfg.label} » dans un rayon de ${state.radiusKm} km autour de la carte.`;
+        return;
+      }
+      const poiResults = [];
+      elems.forEach(el => {
+        const lat = typeof el.lat === 'number' ? el.lat : (el.center && el.center.lat);
+        const lng = typeof el.lon === 'number' ? el.lon : (el.center && el.center.lon);
+        if (typeof lat !== 'number' || typeof lng !== 'number') return;
+        const routePosition = routeMetrics
+          ? findPoiRoutePosition(lat, lng, routePoints, routeMetrics.cumulativeMeters)
+          : null;
+        if (routePosition && routePosition.distanceMeters > POI_ROUTE_BUFFER_METERS) return;
+        poiResults.push({ el, lat, lng, routePosition });
+      });
+      if (routeMetrics) {
+        poiResults.sort((a, b) => a.routePosition.alongMeters - b.routePosition.alongMeters);
+      }
+      const visibleResults = poiResults.slice(0, routeMetrics ? POI_ROUTE_MAX_RESULTS : 20);
+      if (!visibleResults.length) {
+        listEl.textContent = routeMetrics
+          ? `Aucun résultat « ${cfg.label} » à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours.`
+          : `Aucun résultat cartographiable « ${cfg.label} » dans ce rayon.`;
+        return;
+      }
+      const poiLocations = [];
+      visibleResults.forEach(({ el, lat, lng, routePosition }) => {
+        const name = (el.tags && (el.tags.name || el.tags['name:fr'])) || cfg.label;
+        const routeDetail = routePosition
+          ? `${(routePosition.alongMeters / 1000).toFixed(1)} km depuis le départ · ${
+            routePosition.distanceMeters <= 25
+              ? 'sur le parcours'
+              : `à ${Math.round(routePosition.distanceMeters)} m du parcours`
+          }`
+          : '';
+        const marker = L.circleMarker([lat, lng], {
+          radius: 8, color: '#ffffff', weight: 2, fillColor: '#0284c7', fillOpacity: 0.95
+        }).addTo(poiLayerGroup);
+        const popup = document.createElement('div');
+        const popupName = document.createElement('strong');
+        popupName.textContent = name;
+        const popupCategory = document.createElement('div');
+        popupCategory.textContent = routePosition ? `${cfg.label} · ${routeDetail}` : cfg.label;
+        popupCategory.style.cssText = 'font-size:11px;color:#475569;';
+        popup.append(popupName, popupCategory);
+        marker.bindPopup(popup);
+        if (routeDetail) marker.bindTooltip(`${name} · ${routeDetail}`);
+        poiLocations.push([lat, lng]);
+
+        const item = document.createElement('div');
+        item.className = 'row-between';
+        item.style.cssText = 'background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;gap:8px;';
+        const itemInfo = document.createElement('div');
+        itemInfo.style.cssText = 'display:flex;flex-direction:column;min-width:0;gap:2px;';
+        const itemName = document.createElement('strong');
+        itemName.textContent = name;
+        itemName.style.cssText = 'font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        itemInfo.appendChild(itemName);
+        if (routeDetail) {
+          const itemRouteDetail = document.createElement('span');
+          itemRouteDetail.className = 'muted-xs';
+          itemRouteDetail.textContent = routeDetail;
+          itemInfo.appendChild(itemRouteDetail);
+        }
+        const addButton = document.createElement('button');
+        addButton.type = 'button';
+        addButton.className = 'btn btn-accent';
+        addButton.style.cssText = 'padding:3px 8px;font-size:10px;';
+        addButton.textContent = '+ Étape';
+        item.append(itemInfo, addButton);
+        addButton.addEventListener('click', () => {
+          state.waypoints.push({ lat, lng, name });
+          renderWaypoints();
+          recomputeCurrentMode();
+        });
+        listEl.appendChild(item);
+      });
+      const summary = document.createElement('div');
+      summary.style.color = '#64748b';
+      summary.textContent = routeMetrics
+        ? `${poiLocations.length}${elems.length >= POI_ROUTE_MAX_RESULTS ? '+' : ''} résultat(s) à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours, triés depuis le départ.`
+        : `${poiLocations.length} résultat(s) — rayon ${state.radiusKm} km`;
+      listEl.insertBefore(summary, listEl.firstChild);
+      if (!routeMetrics) {
+        const bounds = L.latLngBounds(poiLocations);
+        if (poiLocations.length === 1) {
+          map.setView(poiLocations[0], Math.max(map.getZoom(), 14));
+        } else if (map.getZoom() < 12) {
+          map.fitBounds(bounds, { padding: [35, 35], maxZoom: 14 });
+        }
+      }
+    }
+
+    function renderPlaceProposals(name, greenwayCount, centerLat, centerLng) {
+      const container = document.getElementById('place-proposals');
+      const countEl = document.getElementById('place-proposals-count');
+      const listEl = document.getElementById('place-proposals-list');
+      container.classList.remove('hidden');
+      listEl.innerHTML = '';
+
+      const proposals = [];
+      state.loadedRoutes.forEach(route => {
+        proposals.push({
+          id: route.id,
+          name: route.name,
+          detail: route.network || 'Itinéraire Waymarked Trails',
+          route
+        });
+      });
+      state.circuits.slice(0, 10).forEach((circuit, idx) => {
+        proposals.push({
+          id: `circuit-${circuit.id}-${idx}`,
+          name: circuit.name,
+          detail: `${(circuit.distanceMeters / 1000).toFixed(2)} km · ${circuit.surface || 'Itinéraire cyclable'}`
+        });
+      });
+      EUROPEAN_VELOROUTES_CATALOG.forEach(catalogRoute => {
+        const nearestMeters = catalogRoute.waypoints.reduce((nearest, point) => {
+          const distance = haversineMeters([centerLat, centerLng], point);
+          return Math.min(nearest, distance);
+        }, Infinity);
+        if (nearestMeters <= 180000) {
+          proposals.push({
+            id: `catalog-${catalogRoute.id}`,
+            name: catalogRoute.name,
+            detail: `${catalogRoute.network} · catalogue intégré`,
+            catalogRoute
+          });
+        }
+      });
+
+      const unique = [];
+      const seen = new Set();
+      proposals.forEach(proposal => {
+        const key = `${proposal.name.toLowerCase()}-${proposal.detail.toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(proposal);
+        }
+      });
+
+      countEl.textContent = `${unique.length + (greenwayCount > 0 ? 1 : 0)} résultat${unique.length + (greenwayCount > 0 ? 1 : 0) > 1 ? 's' : ''}`;
+
+      if (greenwayCount > 0) {
+        const greenRow = document.createElement('div');
+        greenRow.className = 'route-card';
+        greenRow.innerHTML = `<strong>Voies vertes &amp; pistes détectées</strong><div class="muted-xs">${greenwayCount} tracé(s) visible(s) autour de ${name}</div>`;
+        greenRow.addEventListener('click', () => {
+          map.setZoom(Math.max(map.getZoom(), 14));
+        });
+        listEl.appendChild(greenRow);
+      }
+
+      unique.slice(0, 12).forEach(proposal => {
+        const row = document.createElement('div');
+        row.className = 'route-card';
+        row.innerHTML = `<strong>${proposal.name}</strong><div class="muted-xs">${proposal.detail}</div>`;
+        row.addEventListener('click', async () => {
+          if (proposal.catalogRoute) {
+            await selectCatalogVeloroute(proposal.catalogRoute, true);
+          } else if (proposal.route) {
+            await searchAndTraceAnyEuropeanRoute(proposal.route.ref || proposal.route.name);
+          } else {
+            const circuit = state.circuits.find(c => c.name === proposal.name);
+            if (circuit && circuit.segments.length) {
+              activeVelorouteGroup.clearLayers();
+              circuit.segments.forEach(segment => {
+                L.polyline(segment, { pane: 'veloroutesPane', color: circuit.color, weight: 7, opacity: 1 }).addTo(activeVelorouteGroup);
+              });
+              map.fitBounds(L.featureGroup(activeVelorouteGroup.getLayers()).getBounds(), { padding: [30, 30], maxZoom: 15 });
+              openVelorouteSheet({
+                id: `city-circuit-${circuit.id}`,
+                ref: 'OSM',
+                name: circuit.name,
+                network: circuit.network,
+                surface: circuit.surface,
+                color: circuit.color,
+                coords2d: circuit.segments.flat()
+              });
+            }
+          }
+        });
+        listEl.appendChild(row);
+      });
+
+      if (!unique.length && greenwayCount <= 0) {
+        listEl.textContent = `Aucun itinéraire détaillé n’a été trouvé autour de ${name}. Zoomez ou réessayez avec les calques cyclables.`;
+      }
+    }
+
+    async function activatePlaceOnMap(lat, lng, name) {
+      state.placeSearchActive = true;
+      map.setView([lat, lng], 12);
+      if (!state.greenwaysEnabled) {
+        state.greenwaysEnabled = true;
+        const toggleGreenwaysBtn = document.getElementById('toggle-greenways');
+        toggleGreenwaysBtn.textContent = '✓ Voies vertes & pistes';
+        toggleGreenwaysBtn.classList.remove('btn-outline');
+        toggleGreenwaysBtn.classList.add('btn-accent');
+        cyclosmGreenwaysOverlay.addTo(map);
+      }
+      if (!map.hasLayer(waymarkedCyclingOverlay)) waymarkedCyclingOverlay.addTo(map);
+      state.waymarkedEnabled = true;
+
+      const proposalsContainer = document.getElementById('place-proposals');
+      const proposalsList = document.getElementById('place-proposals-list');
+      proposalsContainer.classList.remove('hidden');
+      renderPlaceProposals(name, 0, lat, lng);
+      proposalsList.insertAdjacentHTML('afterbegin', `<div class="muted-xs">Parcours locaux actualisés en arrière-plan...</div>`);
+
+      setStatus(`Lieu centré : ${name}. Catalogue cyclable disponible immédiatement.`);
+      setTimeout(async () => {
+        const greenwayCount = await loadVisibleGreenways();
+        await discoverLocalCircuits(lat, lng, 8);
+        await scanVeloroutesInCurrentViewport();
+        renderPlaceProposals(name, greenwayCount || 0, lat, lng);
+        state.placeSearchActive = false;
+        setStatus(`Lieu centré : ${name}. ${state.circuits.length} aménagement(s) local(aux) chargé(s).`);
+      }, 150);
+    }
+
+    async function searchPlaces(queryText) {
+      const q = (queryText || '').trim();
+      const box = document.getElementById('search-results');
+      if (!q) return;
+      setStatus(`Recherche de « ${q} » en Europe...`);
+      try {
+        const res = await fetchWithTimeout(`https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=fr&q=${encodeURIComponent(q)}`, {}, 3500);
+        if (!res.ok) {
+          box.classList.remove('hidden');
+          box.innerHTML = '<div style="padding:8px;color:#b91c1c;">Recherche momentanément indisponible. Réessayez dans quelques instants.</div>';
+          setStatus('La recherche de lieux est momentanément indisponible.');
+          return;
+        }
+        const items = await res.json();
+        box.innerHTML = '';
+        if (!Array.isArray(items) || !items.length) {
+          box.classList.remove('hidden');
+          box.innerHTML = '<div style="padding:8px;color:#94a3b8;">Aucun lieu trouvé.</div>';
+          return;
+        }
+        box.classList.remove('hidden');
+        const first = items[0];
+        const firstLat = parseFloat(first.lat);
+        const firstLng = parseFloat(first.lon);
+        if (Number.isFinite(firstLat) && Number.isFinite(firstLng)) {
+          activatePlaceOnMap(firstLat, firstLng, first.display_name.split(',')[0]);
+        }
+        items.forEach(it => {
+          const row = document.createElement('button');
+          row.type = 'button';
+          row.style.cssText = 'display:block;width:100%;text-align:left;padding:8px;border:none;border-bottom:1px solid #f1f5f9;background:#fff;cursor:pointer;font-size:12px;';
+          row.textContent = it.display_name;
+          row.addEventListener('click', () => {
+            box.classList.add('hidden');
+            const lat = parseFloat(it.lat), lng = parseFloat(it.lon);
+            activatePlaceOnMap(lat, lng, it.display_name.split(',')[0]);
+          });
+          box.appendChild(row);
+        });
+      } catch (_) {
+        box.classList.remove('hidden');
+        box.innerHTML = '<div style="padding:8px;color:#b91c1c;">Impossible de joindre le service de recherche. Vérifiez votre connexion.</div>';
+        setStatus('Impossible de joindre le service de recherche de lieux.');
+      }
+    }
+
+    function addRouteStageField() {
+      const container = document.getElementById('route-via-fields');
+      const row = document.createElement('div');
+      row.className = 'row-gap route-via-row';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'input-text flex-1';
+      input.placeholder = `Étape ${container.children.length + 1} (lieu ou adresse)`;
+      input.setAttribute('aria-label', input.placeholder);
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'btn btn-outline';
+      removeButton.style.padding = '5px 8px';
+      removeButton.textContent = '×';
+      removeButton.title = 'Supprimer cette étape';
+      removeButton.addEventListener('click', () => row.remove());
+      row.append(input, removeButton);
+      container.appendChild(row);
+      input.focus();
+    }
+
+    async function geocodeRouteLocation(query) {
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=fr&q=${encodeURIComponent(query)}`;
+      let response;
+      try {
+        response = await fetchWithTimeout(url, {}, 5000);
+      } catch (error) {
+        throw new Error(error && error.name === 'AbortError'
+          ? `La recherche de « ${query} » a expiré.`
+          : `Impossible de joindre le service de géocodage pour « ${query} ».`);
+      }
+      if (!response.ok) throw new Error(`Le géocodage a répondu ${response.status} pour « ${query} ».`);
+      const results = await response.json();
+      const result = Array.isArray(results) && results[0];
+      const lat = result ? Number(result.lat) : NaN;
+      const lng = result ? Number(result.lon) : NaN;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        throw new Error(`Lieu introuvable : « ${query} ». Vérifiez son nom puis réessayez.`);
+      }
+      return {
+        lat,
+        lng,
+        name: result.display_name || query
+      };
+    }
+
+    async function calculateEnteredRoute() {
+      const start = document.getElementById('route-start-input').value.trim();
+      const end = document.getElementById('route-end-input').value.trim();
+      const via = [...document.querySelectorAll('#route-via-fields input')]
+        .map(input => input.value.trim())
+        .filter(Boolean);
+      const queries = [start, ...via, end];
+      if (!start || !end) {
+        setStatus('Renseignez un départ et une arrivée avant de calculer le parcours.');
+        return;
+      }
+
+      const button = document.getElementById('btn-calculate-entered-route');
+      button.disabled = true;
+      const locations = [];
+      try {
+        for (let i = 0; i < queries.length; i++) {
+          if (i > 0) await new Promise(resolve => setTimeout(resolve, 1100));
+          setStatus(`Recherche du point ${i + 1}/${queries.length} : ${queries[i]}...`);
+          locations.push(await geocodeRouteLocation(queries[i]));
+        }
+
+        pushHistorySnapshot();
+        state.waypoints = locations;
+        state.customDrawPoints = [];
+        state.selectedRouteId = null;
+        state.planMode = 'abc';
+        updateWaymarkedLayerOpacity();
+        document.querySelectorAll('.plan-btn').forEach(item => item.classList.remove('active'));
+        document.getElementById('plan-abc').classList.add('active');
+        document.getElementById('loop-controls').classList.add('hidden');
+        document.getElementById('draw-mode-banner').classList.add('hidden');
+        document.getElementById('map').style.cursor = '';
+        renderWaypoints();
+        map.fitBounds(L.latLngBounds(locations.map(point => [point.lat, point.lng])), {
+          padding: [55, 55],
+          maxZoom: 13
+        });
+        await computeWaypointsRoute();
+      } catch (error) {
+        setStatus(error && error.message
+          ? error.message
+          : 'Impossible de géocoder les points du parcours. Vérifiez la connexion puis réessayez.');
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function toLocalDateTimeInputValue(date) {
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    }
+
+    function initializeWeatherDepartureInput() {
+      const input = document.getElementById('weather-departure');
+      const now = new Date();
+      input.min = toLocalDateTimeInputValue(now);
+      input.max = toLocalDateTimeInputValue(new Date(now.getTime() + 15 * 24 * 3600000));
+      input.value = toLocalDateTimeInputValue(now);
+    }
+
+    // =========================================================================
+    // 6. ÉVÉNEMENTS UI & EXPORTS
+    // =========================================================================
+    map.on('click', (e) => {
+      const { lat, lng } = e.latlng;
+      streetViewTarget = e.latlng;
+      if (state.planMode === 'draw') {
+        addCustomDrawPoint(e.latlng);
+        return;
+      }
+      pushHistorySnapshot();
+      if (state.planMode === 'loop') {
+        state.waypoints = [{ lat, lng, name: 'Départ A' }];
+        renderWaypoints();
+        recomputeCurrentMode();
+        return;
+      }
+      if (state.greenwaysEnabled && state.waypoints.length > 0) {
+        inspectVelorouteAtClick(lat, lng);
+        return;
+      }
+      const letter = String.fromCharCode(65 + state.waypoints.length);
+      state.waypoints.push({ lat, lng, name: `Point ${letter}` });
+      renderWaypoints();
+      recomputeCurrentMode();
+      if (!state.greenwaysEnabled) {
+        inspectVelorouteAtClick(lat, lng);
+      }
+    });
+
+    // Recherche directe d'une véloroute (V52, EV6, etc.)
+    const mobilePanelOpenBtn = document.getElementById('btn-mobile-panel-open');
+    const mobilePanelCloseBtn = document.getElementById('btn-mobile-panel-close');
+    const closeMobilePanel = () => {
+      document.body.classList.remove('mobile-sidebar-open');
+      mobilePanelOpenBtn.setAttribute('aria-expanded', 'false');
+      setTimeout(() => map.invalidateSize({ pan: false }), 200);
+    };
+    mobilePanelOpenBtn.addEventListener('click', () => {
+      document.body.classList.add('mobile-sidebar-open');
+      mobilePanelOpenBtn.setAttribute('aria-expanded', 'true');
+      setTimeout(() => map.invalidateSize({ pan: false }), 200);
+    });
+    mobilePanelCloseBtn.addEventListener('click', closeMobilePanel);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeMobilePanel();
+    });
+
+    const refInputEl = document.getElementById('ref-search-input');
+    const refBtnEl = document.getElementById('btn-find-ref-route');
+    refBtnEl.addEventListener('click', () => searchAndTraceAnyEuropeanRoute(refInputEl.value));
+    refInputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        searchAndTraceAnyEuropeanRoute(refInputEl.value);
+      }
+    });
+
+    // Raccourcis EuroVelo & V52
+    document.querySelectorAll('.ev-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-route-id');
+        const item = EUROPEAN_VELOROUTES_CATALOG.find(r => r.id === id);
+        if (item) selectCatalogVeloroute(item, true);
+      });
+    });
+
+    // Bouton bascule du calque Waymarked Trails
+    const toggleWaymarkedBtn = document.getElementById('toggle-waymarked');
+    toggleWaymarkedBtn.addEventListener('click', () => {
+      state.waymarkedEnabled = !state.waymarkedEnabled;
+      if (state.waymarkedEnabled) {
+        updateWaymarkedLayerOpacity();
+        waymarkedCyclingOverlay.addTo(map);
+        toggleWaymarkedBtn.textContent = '✓ Réseau Véloroutes Europe';
+        toggleWaymarkedBtn.classList.add('btn-purple');
+        toggleWaymarkedBtn.classList.remove('btn-outline');
+      } else {
+        map.removeLayer(waymarkedCyclingOverlay);
+        toggleWaymarkedBtn.textContent = 'Afficher Réseau Véloroutes';
+        toggleWaymarkedBtn.classList.remove('btn-purple');
+        toggleWaymarkedBtn.classList.add('btn-outline');
+      }
+    });
+
+    const toggleGreenwaysBtn = document.getElementById('toggle-greenways');
+    toggleGreenwaysBtn.addEventListener('click', () => {
+      state.greenwaysEnabled = !state.greenwaysEnabled;
+      if (state.greenwaysEnabled) {
+        toggleGreenwaysBtn.textContent = '✓ Voies vertes & pistes';
+        toggleGreenwaysBtn.classList.remove('btn-outline');
+        toggleGreenwaysBtn.classList.add('btn-accent');
+        cyclosmGreenwaysOverlay.addTo(map);
+        setStatus('Calque CyclOSM des voies vertes actif. Chargement des aménagements détaillés...');
+        if (map.getZoom() < 9) {
+          map.setView(map.getCenter(), 9);
+        } else {
+          loadVisibleGreenways();
+        }
+      } else {
+        greenwaysRequestId += 1;
+        greenwaysLayerGroup.clearLayers();
+        greenwaysSnapSegments = [];
+        projectedGreenwaysSnapSegments = [];
+        map.removeLayer(cyclosmGreenwaysOverlay);
+        toggleGreenwaysBtn.textContent = 'Voies vertes & pistes';
+        toggleGreenwaysBtn.classList.remove('btn-accent');
+        toggleGreenwaysBtn.classList.add('btn-outline');
+        setStatus('Calque des voies vertes masqué.');
+      }
+    });
+
+    // Fonds de carte
+    document.querySelectorAll('.layer-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-layer');
+        if (!layers[key]) return;
+        map.removeLayer(cyclosmGreenwaysOverlay);
+        Object.keys(layers).forEach(k => {
+          if (k !== key && map.hasLayer(layers[k])) map.removeLayer(layers[k]);
+        });
+        if (!map.hasLayer(layers[key])) layers[key].addTo(map);
+        if (typeof layers[key].bringToBack === 'function') layers[key].bringToBack();
+        document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // Pratique & Plans
+    function setPractice(mode, badgeText) {
+      state.practice = mode;
+      document.getElementById('practice-badge').textContent = badgeText;
+      document.getElementById('practice-routing-hint').textContent = routingPreferenceDescription();
+      document.querySelectorAll('.practice-btn').forEach(b => b.classList.remove('active'));
+      const activeId = mode === 'road' ? 'mode-road' : (mode === 'gravel' ? 'mode-gravel' : 'mode-vtc');
+      document.getElementById(activeId).classList.add('active');
+      recomputeCurrentMode();
+    }
+    document.getElementById('mode-road').addEventListener('click', () => setPractice('road', '100% Goudron / Voie verte'));
+    document.getElementById('mode-gravel').addEventListener('click', () => setPractice('gravel', 'Chemins & pistes Gravel'));
+    document.getElementById('mode-vtc').addEventListener('click', () => setPractice('vtc', 'Mixte sécurisé VTC'));
+
+    function setPlanMode(mode) {
+      pushHistorySnapshot();
+      state.planMode = mode;
+      updateWaymarkedLayerOpacity();
+      document.querySelectorAll('.plan-btn').forEach(b => b.classList.remove('active'));
+      const idMap = { abc: 'plan-abc', draw: 'plan-draw', loop: 'plan-loop', explore: 'plan-explore' };
+      document.getElementById(idMap[mode]).classList.add('active');
+      document.getElementById('loop-controls').classList.toggle('hidden', mode !== 'loop');
+      document.getElementById('draw-mode-banner').classList.toggle('hidden', mode !== 'draw');
+      if (mode === 'draw') {
+        if (!state.customDrawPoints.length && state.waypoints.length) {
+          state.customDrawPoints = state.waypoints.map(w => ({ lat: w.lat, lng: w.lng }));
+        }
+        if (!state.greenwaysEnabled) {
+          state.greenwaysEnabled = true;
+          const toggleGreenwaysBtn = document.getElementById('toggle-greenways');
+          toggleGreenwaysBtn.textContent = '✓ Voies vertes & pistes';
+          toggleGreenwaysBtn.classList.remove('btn-outline');
+          toggleGreenwaysBtn.classList.add('btn-accent');
+          cyclosmGreenwaysOverlay.addTo(map);
+        }
+        if (map.getZoom() < 14) {
+          map.setZoom(14, { animate: false });
+          if (greenwaysSearchTimer) clearTimeout(greenwaysSearchTimer);
+          greenwaysSearchTimer = setTimeout(loadVisibleGreenways, 150);
+        } else {
+          loadVisibleGreenways();
+        }
+        updateCustomDrawnRoute();
+      } else {
+        map.getContainer().style.cursor = '';
+        if (drawSnapMarker) {
+          map.removeLayer(drawSnapMarker);
+          drawSnapMarker = null;
+        }
+        recomputeCurrentMode();
+      }
+    }
+    document.getElementById('plan-abc').addEventListener('click', () => setPlanMode('abc'));
+    document.getElementById('plan-draw').addEventListener('click', () => setPlanMode('draw'));
+    document.getElementById('plan-loop').addEventListener('click', () => {
+      setPlanMode('loop');
+      if (!state.waypoints.length) {
+        setStatus('Mode Boucle auto actif : cliquez sur la carte pour placer votre point de départ A, puis choisissez NORD, EST, OUEST ou SUD.');
+      }
+    });
+    document.querySelectorAll('#loop-dir-buttons [data-loop-dir]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        pushHistorySnapshot();
+        setLoopDirectionUI(btn.getAttribute('data-loop-dir'));
+        if (state.waypoints.length) {
+          recomputeCurrentMode();
+        } else {
+          setStatus(`Direction ${btn.textContent.trim()} sélectionnée : cliquez sur la carte pour poser le point de départ A.`);
+        }
+      });
+    });
+    document.getElementById('plan-explore').addEventListener('click', () => setPlanMode('explore'));
+
+    document.getElementById('btn-undo-action').addEventListener('click', undoLastAction);
+    document.getElementById('btn-reset-all').addEventListener('click', resetEverything);
+    document.getElementById('btn-undo-point').addEventListener('click', () => {
+      if (state.customDrawPoints.length) {
+        pushHistorySnapshot();
+        state.customDrawPoints.pop();
+        updateCustomDrawnRoute();
+      }
+    });
+    document.getElementById('btn-finish-draw').addEventListener('click', () => {
+      if (state.customDrawPoints.length >= 2) {
+        pushHistorySnapshot();
+        state.waypoints = state.customDrawPoints.map((p, idx) => ({
+          lat: p.lat,
+          lng: p.lng,
+          name: `Étape ${idx + 1}`
+        }));
+        state.customDrawPoints = [];
+        state.planMode = 'abc';
+        updateWaymarkedLayerOpacity();
+        document.querySelectorAll('.plan-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('plan-abc').classList.add('active');
+        document.getElementById('loop-controls').classList.add('hidden');
+        document.getElementById('draw-mode-banner').classList.add('hidden');
+        renderWaypoints();
+        setStatus(`Parcours enregistré avec ${state.waypoints.length} étapes. Vous pouvez l’exporter en GPX.`);
+        return;
+      }
+      setPlanMode('abc');
+    });
+
+    window.addEventListener('keydown', (e) => {
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && tag !== 'input' && tag !== 'textarea') {
+        e.preventDefault();
+        undoLastAction();
+      }
+    });
+
+    document.getElementById('radius-slider').addEventListener('input', (e) => {
+      state.radiusKm = Number(e.target.value);
+      document.getElementById('radius-label').textContent = `${state.radiusKm} km`;
+    });
+    document.getElementById('loop-km-slider').addEventListener('input', (e) => {
+      state.loopKm = Number(e.target.value);
+      document.getElementById('loop-km-label').textContent = `${state.loopKm} km`;
+    });
+    document.getElementById('loop-km-slider').addEventListener('change', () => {
+      if (state.planMode === 'loop' && state.waypoints.length) {
+        recomputeCurrentMode();
+      }
+    });
+
+
+    document.getElementById('radius-slider').addEventListener('change', searchNearbyCycleways);
+
+    document.getElementById('btn-my-location').addEventListener('click', (e) => {
+      const button = e.currentTarget;
+      if (!navigator.geolocation) {
+        setStatus('La géolocalisation n’est pas disponible dans ce navigateur.');
+        return;
+      }
+
+      button.disabled = true;
+      setStatus('Localisation en cours...');
+      navigator.geolocation.getCurrentPosition((position) => {
+        button.disabled = false;
+        const { latitude, longitude } = position.coords;
+        map.setView([latitude, longitude], 13);
+        searchNearbyCycleways();
+      }, (error) => {
+        button.disabled = false;
+        const messages = {
+          1: 'Autorisez l’accès à votre position pour rechercher les pistes à proximité.',
+          2: 'Votre position est momentanément indisponible.',
+          3: 'La localisation a expiré. Réessayez.'
+        };
+        setStatus(messages[error.code] || 'Impossible d’obtenir votre position.');
+      }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+    });
+
+    document.getElementById('btn-street-view').addEventListener('click', () => {
+      const target = streetViewTarget || map.getCenter();
+      const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${target.lat.toFixed(6)},${target.lng.toFixed(6)}`;
+      const streetViewWindow = window.open(url, '_blank');
+      if (streetViewWindow) streetViewWindow.opener = null;
+      else setStatus('Le navigateur a bloqué Street View. Autorisez les fenêtres contextuelles puis réessayez.');
+    });
+
+    document.getElementById('btn-refresh-ways').addEventListener('click', () => {
+      searchNearbyCycleways();
+      scanVeloroutesInCurrentViewport();
+    });
+
+    document.getElementById('btn-clear-points').addEventListener('click', () => {
+      state.waypoints = [];
+      renderWaypoints();
+      recomputeCurrentMode();
+    });
+
+    document.getElementById('btn-close-track-detail').addEventListener('click', () => {
+      document.getElementById('track-detail-card').classList.add('hidden');
+    });
+
+    document.querySelectorAll('.poi-btn').forEach(btn => {
+      btn.addEventListener('click', () => loadPoiCategory(btn.getAttribute('data-poi')));
+    });
+    document.getElementById('btn-clear-pois').addEventListener('click', () => {
+      poiRequestId++;
+      state.activePoiCategory = null;
+      poiLayerGroup.clearLayers();
+      document.getElementById('poi-list').innerHTML = '';
+    });
+
+    document.getElementById('btn-search').addEventListener('click', () => searchPlaces(document.getElementById('search-input').value));
+    document.getElementById('search-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); searchPlaces(e.target.value); }
+    });
+
+    document.getElementById('btn-add-route-stage').addEventListener('click', addRouteStageField);
+    const routePracticeDialog = document.getElementById('route-practice-dialog');
+    let pendingRoutePractice = state.practice;
+    const routePracticeOptions = [...document.querySelectorAll('#route-practice-options [data-practice]')];
+    const updateRoutePracticeSelection = () => {
+      routePracticeOptions.forEach(option => {
+        const selected = option.dataset.practice === pendingRoutePractice;
+        option.classList.toggle('active', selected);
+        option.setAttribute('aria-pressed', String(selected));
+      });
+    };
+    document.getElementById('route-entry-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      pendingRoutePractice = state.practice;
+      updateRoutePracticeSelection();
+      routePracticeDialog.showModal();
+      routePracticeOptions.find(option => option.dataset.practice === pendingRoutePractice)?.focus();
+    });
+    routePracticeOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        pendingRoutePractice = option.dataset.practice;
+        updateRoutePracticeSelection();
+      });
+    });
+    document.getElementById('btn-cancel-route-practice').addEventListener('click', () => {
+      routePracticeDialog.close();
+    });
+    document.getElementById('btn-confirm-route-practice').addEventListener('click', () => {
+      routePracticeDialog.close();
+      if (!document.getElementById('route-entry-form').reportValidity()) return;
+      const selectedPractice = {
+        road: ['road', '100% Goudron / Voie verte'],
+        gravel: ['gravel', 'Chemins & pistes Gravel'],
+        vtc: ['vtc', 'Mixte sécurisé VTC']
+      }[pendingRoutePractice];
+      if (selectedPractice && state.practice !== pendingRoutePractice) {
+        setPractice(selectedPractice[0], selectedPractice[1]);
+      }
+      calculateEnteredRoute();
+    });
+
+    initializeWeatherDepartureInput();
+    document.getElementById('weather-departure').addEventListener('change', () => {
+      if (state.activeRouteData) refreshRouteWeather(state.activeRouteData);
+    });
+
+    document.querySelectorAll('.quick-place').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const parts = btn.getAttribute('data-quick').split(',');
+        const lat = parseFloat(parts[0]), lng = parseFloat(parts[1]), name = parts.slice(2).join(',');
+        activatePlaceOnMap(lat, lng, name);
+      });
+    });
+
+    document.getElementById('dplus-scrubber').addEventListener('input', (e) => handleScrubAtRatio(Number(e.target.value) / 1000));
+    const elevationCanvas = document.getElementById('elevation-canvas');
+    elevationCanvas.addEventListener('pointerdown', event => {
+      if (elevationCanvas.setPointerCapture) elevationCanvas.setPointerCapture(event.pointerId);
+      moveElevationCursorFromPointer(event);
+    });
+    elevationCanvas.addEventListener('pointermove', event => {
+      if (event.buttons) moveElevationCursorFromPointer(event);
+    });
+    document.getElementById('average-speed-select').addEventListener('change', () => {
+      document.getElementById('stat-duration-label').textContent = `Durée à ${getAverageSpeedKmh()} km/h`;
+      const route = state.activeRouteData;
+      if (route) {
+        route.durationSeconds = estimateRouteDurationSeconds(route.distanceMeters);
+        document.getElementById('stat-duration').textContent = formatEstimatedDuration(route.durationSeconds);
+        refreshRouteWeather(route);
+      }
+      if (routeAlternatives.length) renderRouteAlternativeOptions();
+    });
+
+    document.getElementById('btn-export-gpx').addEventListener('click', () => {
+      if (!state.activeRouteCoords || state.activeRouteCoords.length < 2) {
+        alert('Sélectionnez d’abord une véloroute ou calculez un tracé avant d’exporter en GPX.');
+        return;
+      }
+      const cleanExportCoords = pruneRouteSpikesAndUTurns(
+        state.activeRouteCoords.map(p => [p.lat, p.lng])
+      );
+      const trkpts = cleanExportCoords.map(([lat, lng]) => {
+        const match = state.activeRouteCoords.find(p => Math.abs(p.lat - lat) < 1e-6 && Math.abs(p.lng - lng) < 1e-6);
+        const elevation = match && Number.isFinite(match.ele) ? `<ele>${match.ele.toFixed(1)}</ele>` : '';
+        return `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}">${elevation}</trkpt>`;
+      }).join('\n');
+      const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="VeloEurope Studio">
+  <trk>
+    <name>Veloroute VeloEurope Studio</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+      const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'veloroute-europe.gpx'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+
+    map.on('moveend', () => {
+      rebuildGreenwaySnapIndex();
+      if (liveScanTimer) clearTimeout(liveScanTimer);
+      if (state.placeSearchActive) return;
+      liveScanTimer = setTimeout(scanVeloroutesInCurrentViewport, 400);
+      if (state.greenwaysEnabled) {
+        if (greenwaysSearchTimer) clearTimeout(greenwaysSearchTimer);
+        greenwaysSearchTimer = setTimeout(loadVisibleGreenways, 700);
+      }
+    });
+
+    // Initialisation immédiate
+    renderBaseCatalogPolylines();
+    renderVisibleVeloroutesSidebar();
+    drawElevationProfile();
+    setTimeout(() => {
+      map.invalidateSize();
+      map.invalidateSize({ pan: false });
+      scanVeloroutesInCurrentViewport();
+    }, 200);
+    window.addEventListener('resize', () => map.invalidateSize());
+  </script>
+</body>
+</html>
