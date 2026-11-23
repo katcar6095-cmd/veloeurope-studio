@@ -1360,6 +1360,111 @@
       return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
     }
 
+    function pruneRouteSpikesAndUTurns(coordsLatLng, maxSpurMeters = 2500) {
+      if (!Array.isArray(coordsLatLng) || coordsLatLng.length < 3) return coordsLatLng;
+      let pts = coordsLatLng.map(p => [Number(p[0]), Number(p[1])]).filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+      if (pts.length < 3) return pts;
+
+      // 1. Dédupliquer les points consécutifs quasi-identiques (< 1.5 m)
+      const deduped = [pts[0]];
+      for (let i = 1; i < pts.length; i++) {
+        if (haversineMeters(deduped[deduped.length - 1], pts[i]) >= 1.5) {
+          deduped.push(pts[i]);
+        }
+      }
+      pts = deduped;
+      if (pts.length < 3) return pts;
+
+      // 2. Détecter et couper les allers-retours / impasses / demi-tours sur TOUS les parcours
+      // (A->B->C, tracé libre, boucle, véloroutes) :
+      // - Si un point j revient à proximité (< 35 m) d'un point antérieur i sur un aller-retour (jusqu'à maxSpurMeters),
+      //   on supprime l'aller-retour inutile [i+1 .. j-1].
+      // - Si un sommet forme un demi-tour brusque (angle entre vecteurs entrants/sortants <= 32°, soit >= 148° de rebroussement),
+      //   on coupe la branche aller-retour si elle n'est pas nécessaire pour atteindre la destination finale.
+      const finalDest = pts[pts.length - 1];
+      const isClosedLoopIntent = haversineMeters(pts[0], finalDest) <= 1500 && pts.length > 6;
+
+      let changed = true;
+      let guard = 0;
+      while (changed && guard < 16) {
+        changed = false;
+        guard++;
+        const cum = [0];
+        for (let k = 1; k < pts.length; k++) {
+          cum.push(cum[k - 1] + haversineMeters(pts[k - 1], pts[k]));
+        }
+
+        const cleaned = [];
+        let i = 0;
+        while (i < pts.length) {
+          cleaned.push(pts[i]);
+          let jumpTo = -1;
+
+          // Recherche d'un point de retour proche de pts[i] (aller-retour / impasse)
+          for (let j = i + 2; j < pts.length; j++) {
+            const loopPathLen = cum[j] - cum[i];
+            if (loopPathLen > maxSpurMeters * 2.4) break;
+            // Ne jamais court-circuiter la boucle globale volontaire du départ vers l'arrivée
+            if (isClosedLoopIntent && i < 2 && j >= pts.length - 3) continue;
+
+            const directDist = haversineMeters(pts[i], pts[j]);
+            if (directDist <= 35 && loopPathLen >= Math.max(20, directDist * 2.2)) {
+              jumpTo = j;
+            }
+          }
+
+          if (jumpTo > i + 1) {
+            i = jumpTo;
+            changed = true;
+            continue;
+          }
+
+          // Détection d'un rebroussement sec (angle <= 32° entre les deux branches partant du sommet)
+          if (cleaned.length >= 2 && i < pts.length - 1) {
+            const prev = cleaned[cleaned.length - 2];
+            const curr = cleaned[cleaned.length - 1];
+            const next = pts[i + 1];
+            const d1 = haversineMeters(prev, curr);
+            const d2 = haversineMeters(curr, next);
+            if (d1 > 2 && d2 > 2 && Math.min(d1, d2) <= maxSpurMeters) {
+              const cosLat = Math.cos(curr[0] * Math.PI / 180);
+              const v1x = (prev[1] - curr[1]) * cosLat;
+              const v1y = (prev[0] - curr[0]);
+              const v2x = (next[1] - curr[1]) * cosLat;
+              const v2y = (next[0] - curr[0]);
+              const n1 = Math.hypot(v1x, v1y);
+              const n2 = Math.hypot(v2x, v2y);
+              if (n1 > 0 && n2 > 0) {
+                const cosAngle = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (n1 * n2)));
+                const angleDeg = Math.acos(cosAngle) * 180 / Math.PI;
+                if (angleDeg <= 32) {
+                  // Si la branche suivante rapproche nettement de la destination sans allonger inutilement
+                  const distCurrToDest = haversineMeters(curr, finalDest);
+                  const distNextToDest = haversineMeters(next, finalDest);
+                  if (distNextToDest <= distCurrToDest + 30) {
+                    cleaned.pop();
+                    changed = true;
+                  }
+                }
+              }
+            }
+          }
+          i++;
+        }
+        pts = cleaned;
+      }
+      return pts;
+    }
+
+    function computeCoordsDistanceMeters(coordsLatLng) {
+      if (!Array.isArray(coordsLatLng) || coordsLatLng.length < 2) return 0;
+      let total = 0;
+      for (let i = 1; i < coordsLatLng.length; i++) {
+        total += haversineMeters(coordsLatLng[i - 1], coordsLatLng[i]);
+      }
+      return total;
+    }
+
     function fetchWithTimeout(url, options = {}, timeoutMs = 8500) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1428,10 +1533,14 @@
               item.geometry && Array.isArray(item.geometry.coordinates) && item.geometry.coordinates.length >= 2
             );
             if (!feature) continue;
-            const coords = feature.geometry.coordinates.map(c => [c[1], c[0]]);
-            const distanceMeters = Number(feature.properties && (
+            const rawCoords = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+            const coords = pruneRouteSpikesAndUTurns(rawCoords);
+            const rawDistanceMeters = Number(feature.properties && (
               feature.properties['track-length'] || feature.properties.distance
             ) || 0);
+            const distanceMeters = coords.length !== rawCoords.length
+              ? computeCoordsDistanceMeters(coords)
+              : rawDistanceMeters;
             return {
               coords,
               distanceMeters,
@@ -1442,9 +1551,14 @@
             };
           }
           if (json.code === 'Ok' && json.routes && json.routes[0] && json.routes[0].geometry) {
+            const rawCoords = json.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+            const coords = pruneRouteSpikesAndUTurns(rawCoords);
+            const distanceMeters = coords.length !== rawCoords.length
+              ? computeCoordsDistanceMeters(coords)
+              : Number(json.routes[0].distance || 0);
             return {
-              coords: json.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
-              distanceMeters: Number(json.routes[0].distance || 0),
+              coords,
+              distanceMeters,
               durationSeconds: Number(json.routes[0].duration || 0),
               provider: request.provider,
               alternativeIndex
@@ -1476,13 +1590,19 @@
         if (json.code !== 'Ok' || !Array.isArray(json.routes)) return [];
         return json.routes
           .filter(route => route.geometry && Array.isArray(route.geometry.coordinates))
-          .map((route, index) => ({
-            coords: route.geometry.coordinates.map(point => [point[1], point[0]]),
-            distanceMeters: Number(route.distance || 0),
+          .map((route, index) => {
+            const rawCoords = route.geometry.coordinates.map(point => [point[1], point[0]]);
+            const coords = pruneRouteSpikesAndUTurns(rawCoords);
+            const distanceMeters = coords.length !== rawCoords.length
+              ? computeCoordsDistanceMeters(coords)
+              : Number(route.distance || 0);
+            return {
+            coords,
+            distanceMeters,
             durationSeconds: Number(route.duration || 0),
             provider: 'osrm-bike-fallback',
             alternativeIndex: index
-          }))
+          };})
           .filter(route => route.coords.length >= 2);
       } catch (_) {
         return [];
@@ -1780,7 +1900,8 @@
         bestByBin.forEach(anchor => {
           if (!anchor) return;
           const previous = routingWaypoints[routingWaypoints.length - 1];
-          if (haversineMeters(previous, anchor.point) > 250) {
+          // Éviter les ancres trop proches d'un carrefour ou hors-axe qui forcent un aller-retour
+          if (haversineMeters(previous, anchor.point) > 450 && haversineMeters(anchor.point, [end.lat, end.lng]) > 450) {
             routingWaypoints.push(anchor.point);
             routeUsage.set(anchor.routeId, (routeUsage.get(anchor.routeId) || 0) +
               legDistance / binCount);
@@ -2705,7 +2826,8 @@
       activeVelorouteGroup.clearLayers();
       const allPts = [];
 
-      segments.forEach(seg => {
+      segments.forEach(rawSeg => {
+        const seg = pruneRouteSpikesAndUTurns(rawSeg);
         if (!Array.isArray(seg) || seg.length < 2) return;
         allPts.push(...seg);
 
@@ -3691,7 +3813,7 @@
             : []);
         const segments = geometries
           .filter(geometry => Array.isArray(geometry) && geometry.length >= 2)
-          .map(geometry => geometry.map(point => [point.lat, point.lon]));
+          .map(geometry => pruneRouteSpikesAndUTurns(geometry.map(point => [point.lat, point.lon])));
         if (!segments.length) continue;
         let distanceMeters = 0;
         segments.forEach(coords => {
@@ -4828,9 +4950,13 @@
         alert('Sélectionnez d’abord une véloroute ou calculez un tracé avant d’exporter en GPX.');
         return;
       }
-      const trkpts = state.activeRouteCoords.map(p => {
-        const elevation = Number.isFinite(p.ele) ? `<ele>${p.ele.toFixed(1)}</ele>` : '';
-        return `      <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lng.toFixed(6)}">${elevation}</trkpt>`;
+      const cleanExportCoords = pruneRouteSpikesAndUTurns(
+        state.activeRouteCoords.map(p => [p.lat, p.lng])
+      );
+      const trkpts = cleanExportCoords.map(([lat, lng]) => {
+        const match = state.activeRouteCoords.find(p => Math.abs(p.lat - lat) < 1e-6 && Math.abs(p.lng - lng) < 1e-6);
+        const elevation = match && Number.isFinite(match.ele) ? `<ele>${match.ele.toFixed(1)}</ele>` : '';
+        return `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}">${elevation}</trkpt>`;
       }).join('\n');
       const gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="VeloEurope Studio">
