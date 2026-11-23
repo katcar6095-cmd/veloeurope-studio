@@ -246,6 +246,34 @@
       padding: 4px;
       border-radius: 12px;
     }
+    .loop-dir-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .loop-dir-btn {
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #0f172a;
+      border-radius: 9px;
+      padding: 7px 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s ease;
+    }
+    .loop-dir-btn:hover {
+      border-color: #059669;
+      background: #ecfdf5;
+    }
+    .loop-dir-btn.active {
+      border-color: #059669;
+      background: #059669;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
+    }
     .plan-btn {
       border: none;
       background: transparent;
@@ -587,11 +615,23 @@
         </div>
 
         <div id="loop-controls" class="hidden card-soft" style="padding:10px;">
+          <div id="loop-step-hint" class="muted-xs" style="margin-bottom:6px;font-weight:600;color:#065f46;">
+            1. Cliquez sur la carte pour poser le point de départ A, puis choisissez une direction :
+          </div>
           <div class="row-between muted-xs" style="margin-bottom:4px;">
             <span>Distance souhaitée de la boucle</span>
             <span id="loop-km-label" style="font-weight:700;color:#0f172a;">40 km</span>
           </div>
           <input id="loop-km-slider" type="range" min="10" max="150" step="5" value="40" style="width:100%;accent-color:#059669;cursor:pointer;" />
+          <div style="margin-top:8px;">
+            <div class="muted-xs" style="margin-bottom:4px;font-weight:600;color:#334155;">Direction principale de la boucle</div>
+            <div id="loop-dir-buttons" class="loop-dir-grid" role="group" aria-label="Direction de la boucle">
+              <button type="button" data-loop-dir="N" class="loop-dir-btn active" aria-pressed="true">NORD</button>
+              <button type="button" data-loop-dir="E" class="loop-dir-btn" aria-pressed="false">EST</button>
+              <button type="button" data-loop-dir="W" class="loop-dir-btn" aria-pressed="false">OUEST</button>
+              <button type="button" data-loop-dir="S" class="loop-dir-btn" aria-pressed="false">SUD</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -917,6 +957,7 @@
       planMode: 'abc',
       radiusKm: 15,
       loopKm: 40,
+      loopDirection: 'N',
       waypoints: [],
       customDrawPoints: [],
       activeRouteCoords: [],
@@ -1089,6 +1130,7 @@
     function pushHistorySnapshot() {
       state.historyStack.push({
         planMode: state.planMode,
+        loopDirection: state.loopDirection,
         waypoints: JSON.parse(JSON.stringify(state.waypoints)),
         customDrawPoints: JSON.parse(JSON.stringify(state.customDrawPoints)),
         selectedRouteId: state.selectedRouteId
@@ -1108,6 +1150,9 @@
       state.customDrawPoints = prev.customDrawPoints || [];
       state.selectedRouteId = prev.selectedRouteId || null;
 
+      if (prev.loopDirection) {
+        setLoopDirectionUI(prev.loopDirection);
+      }
       if (prev.planMode !== state.planMode) {
         state.planMode = prev.planMode;
         updateWaymarkedLayerOpacity();
@@ -1184,6 +1229,8 @@
       document.getElementById('place-proposals-list').textContent = '';
 
       state.planMode = 'abc';
+      state.loopDirection = 'N';
+      if (typeof setLoopDirectionUI === 'function') setLoopDirectionUI('N');
       updateWaymarkedLayerOpacity();
       document.querySelectorAll('.plan-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('plan-abc').classList.add('active');
@@ -1344,7 +1391,7 @@
       const coordStr = coordsLatLng.map(p => `${p[1].toFixed(6)},${p[0].toFixed(6)}`).join(';');
       const bikeCoords = coordsLatLng.map(p => `${p[1].toFixed(6)},${p[0].toFixed(6)}`).join('|');
       const brouterProfile = profileOverride || ({
-        road: 'fastbike',
+        road: 'trekking',
         gravel: 'gravel',
         vtc: 'trekking'
       }[state.practice] || 'trekking');
@@ -1865,10 +1912,15 @@
           previous = route.coords[index];
         }
 
+        const isClosedLoop = startDeviation <= 500 && endDeviation <= 500 &&
+          haversineMeters(coordsLatLng[0], coordsLatLng[coordsLatLng.length - 1]) <= 1500;
         const directDistance = coordsLatLng.slice(1).reduce((total, point, index) =>
           total + haversineMeters(coordsLatLng[index], point), 0);
-        if (directDistance > 0 &&
+        if (!isClosedLoop && directDistance > 0 &&
           route.distanceMeters > Math.max(directDistance * 4, directDistance + 750000)) {
+          return false;
+        }
+        if (isClosedLoop && route.distanceMeters > Math.max(state.loopKm * 2500, 450000)) {
           return false;
         }
         return longestSingleJumpMeters <= 30000;
@@ -3748,31 +3800,83 @@
       window.setTimeout(() => setRouteDownloadProgress(0, false), 700);
     }
 
+    const LOOP_DIRECTIONS = {
+      N: { label: 'NORD', bearing: 0, delta: 55 },
+      E: { label: 'EST', bearing: 90, delta: 55 },
+      W: { label: 'OUEST', bearing: 270, delta: 55 },
+      S: { label: 'SUD', bearing: 180, delta: 55 }
+    };
+
+    function setLoopDirectionUI(dirKey) {
+      const validKey = LOOP_DIRECTIONS[dirKey] ? dirKey : 'N';
+      state.loopDirection = validKey;
+      document.querySelectorAll('#loop-dir-buttons [data-loop-dir]').forEach(btn => {
+        const isSelected = btn.getAttribute('data-loop-dir') === validKey;
+        btn.classList.toggle('active', isSelected);
+        btn.setAttribute('aria-pressed', String(isSelected));
+      });
+    }
+
+    function buildLoopWaypoints(start, targetKm, dirKey) {
+      const dirCfg = LOOP_DIRECTIONS[dirKey] || LOOP_DIRECTIONS.N;
+      const baseBearing = dirCfg.bearing;
+      const spread = dirCfg.delta;
+      // Rayon approximatif pour obtenir une boucle fermée proche de la distance souhaitée
+      const radiusKm = Math.max(1.8, (targetKm / (2 * Math.PI)) * 0.92);
+      const b1 = (baseBearing - spread + 360) % 360;
+      const b2 = baseBearing;
+      const b3 = (baseBearing + spread) % 360;
+      const p1 = offsetLatLng(start.lat, start.lng, radiusKm * 0.85, b1);
+      const p2 = offsetLatLng(start.lat, start.lng, radiusKm * 1.15, b2);
+      const p3 = offsetLatLng(start.lat, start.lng, radiusKm * 0.85, b3);
+      return [[start.lat, start.lng], p1, p2, p3, [start.lat, start.lng]];
+    }
+
     async function computeLoopFromA() {
-      if (!state.waypoints.length) return;
+      if (!state.waypoints.length) {
+        clearRouteAlternatives();
+        updateStatsUI(null);
+        setStatus('Mode Boucle auto : cliquez d’abord sur la carte pour placer votre point de départ A, puis choisissez NORD, EST, OUEST ou SUD.');
+        return;
+      }
       clearRouteAlternatives();
       setRouteDownloadProgress(12, true);
       const requestId = routeAlternativesRequestId;
       const start = state.waypoints[0];
-      const legDist = Math.max(2.5, state.loopKm / 3.2);
-      const p1 = offsetLatLng(start.lat, start.lng, legDist, 30);
-      const p2 = offsetLatLng(start.lat, start.lng, legDist, 145);
-      const p3 = offsetLatLng(start.lat, start.lng, legDist, 260);
-      setStatus(`Génération d'une boucle (~${state.loopKm} km) autour de A...`);
+      const dirCfg = LOOP_DIRECTIONS[state.loopDirection] || LOOP_DIRECTIONS.N;
+      const practiceLabel = {
+        road: 'Cyclotourisme (goudron & voies calmes, peu de voitures)',
+        gravel: 'Gravel (chemins, pistes & routes peu fréquentées)',
+        vtc: 'VTC / Balade (voies vertes, pistes & routes calmes)'
+      }[state.practice] || 'VTC / Balade';
+
+      routeGuidanceMessage = `Boucle ${dirCfg.label} (~${state.loopKm} km) · ${practiceLabel} · privilégie pistes cyclables, voies vertes et axes à faible trafic automobile.`;
+      setStatus(`Calcul de la boucle ${dirCfg.label} (~${state.loopKm} km) en ${practiceLabel}...`);
       setRouteDownloadProgress(38, true);
-      const alternatives = await fetchOsrmRouteAlternatives([[start.lat, start.lng], p1, p2, p3, [start.lat, start.lng]], percent => {
+
+      const loopCoords = buildLoopWaypoints(start, state.loopKm, state.loopDirection);
+      let alternatives = await fetchOsrmRouteAlternatives(loopCoords, percent => {
         setRouteDownloadProgress(percent, true);
       });
+
+      // Repli avec un rayon légèrement resserré si le routage sur le premier cercle échoue
+      if (!alternatives.length && requestId === routeAlternativesRequestId) {
+        const tighterCoords = buildLoopWaypoints(start, Math.max(10, state.loopKm * 0.72), state.loopDirection);
+        alternatives = await fetchOsrmRouteAlternatives(tighterCoords, percent => {
+          setRouteDownloadProgress(percent, true);
+        });
+      }
+
       if (requestId !== routeAlternativesRequestId) return;
       if (!alternatives.length) {
         setRouteDownloadProgress(0, false);
-        setStatus('Impossible de calculer la boucle avec le profil vélo sélectionné.');
+        setStatus(`Impossible de calculer la boucle ${dirCfg.label} autour de ce point. Essayez un autre point de départ ou une autre distance.`);
         return;
       }
       setRouteDownloadProgress(100, true);
       routeAlternatives = alternatives;
       selectedRouteAlternativeIndex = 0;
-      prepareRouteAlternativeEnrichments('Boucle cyclable');
+      prepareRouteAlternativeEnrichments(`Boucle ${dirCfg.label} (${practiceLabel})`);
       renderRouteAlternativeOptions();
       await selectRouteAlternative(0);
       window.setTimeout(() => setRouteDownloadProgress(0, false), 700);
@@ -4320,7 +4424,13 @@
         return;
       }
       pushHistorySnapshot();
-      if (state.greenwaysEnabled) {
+      if (state.planMode === 'loop') {
+        state.waypoints = [{ lat, lng, name: 'Départ A' }];
+        renderWaypoints();
+        recomputeCurrentMode();
+        return;
+      }
+      if (state.greenwaysEnabled && state.waypoints.length > 0) {
         inspectVelorouteAtClick(lat, lng);
         return;
       }
@@ -4328,7 +4438,9 @@
       state.waypoints.push({ lat, lng, name: `Point ${letter}` });
       renderWaypoints();
       recomputeCurrentMode();
-      inspectVelorouteAtClick(lat, lng);
+      if (!state.greenwaysEnabled) {
+        inspectVelorouteAtClick(lat, lng);
+      }
     });
 
     // Recherche directe d'une véloroute (V52, EV6, etc.)
@@ -4483,7 +4595,23 @@
     }
     document.getElementById('plan-abc').addEventListener('click', () => setPlanMode('abc'));
     document.getElementById('plan-draw').addEventListener('click', () => setPlanMode('draw'));
-    document.getElementById('plan-loop').addEventListener('click', () => setPlanMode('loop'));
+    document.getElementById('plan-loop').addEventListener('click', () => {
+      setPlanMode('loop');
+      if (!state.waypoints.length) {
+        setStatus('Mode Boucle auto actif : cliquez sur la carte pour placer votre point de départ A, puis choisissez NORD, EST, OUEST ou SUD.');
+      }
+    });
+    document.querySelectorAll('#loop-dir-buttons [data-loop-dir]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        pushHistorySnapshot();
+        setLoopDirectionUI(btn.getAttribute('data-loop-dir'));
+        if (state.waypoints.length) {
+          recomputeCurrentMode();
+        } else {
+          setStatus(`Direction ${btn.textContent.trim()} sélectionnée : cliquez sur la carte pour poser le point de départ A.`);
+        }
+      });
+    });
     document.getElementById('plan-explore').addEventListener('click', () => setPlanMode('explore'));
 
     document.getElementById('btn-undo-action').addEventListener('click', undoLastAction);
@@ -4532,6 +4660,11 @@
     document.getElementById('loop-km-slider').addEventListener('input', (e) => {
       state.loopKm = Number(e.target.value);
       document.getElementById('loop-km-label').textContent = `${state.loopKm} km`;
+    });
+    document.getElementById('loop-km-slider').addEventListener('change', () => {
+      if (state.planMode === 'loop' && state.waypoints.length) {
+        recomputeCurrentMode();
+      }
     });
     document.getElementById('loop-km-slider').addEventListener('change', () => {
       if (state.planMode === 'loop') recomputeCurrentMode();
