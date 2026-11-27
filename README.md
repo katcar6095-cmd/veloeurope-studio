@@ -58,6 +58,17 @@ routage, d'altitude, de météo et OpenStreetMap.
   le service vélo ; il est signalé et ses préférences sont moins précises.
   Ces choix peuvent allonger le trajet et ne garantissent ni l'absence de
   nationales ni une faible circulation réelle : vérifiez le parcours avant le départ.
+- Pour un trajet **A → B → C**, partout en Europe, les points de guidage posés
+  sur une véloroute balisée ne sont pas des étapes obligatoires : s'ils
+  provoquent un aller-retour, celui-ci est retiré. Le guidage privilégie les
+  EuroVelo et véloroutes nationales ou régionales ; les circuits locaux ne
+  servent plus de raccourci. Chaque option indique ses kilomètres sur
+  véloroutes balisées (EuroVelo, nationales, régionales) et les options les
+  plus balisées sont classées en premier. Une variante est écartée et signalée
+  si elle dépasse le trajet le plus court de 35 % (+1,5 km) ; cette marge monte
+  jusqu'à 75 % pour une variante entièrement sur véloroute.
+  Sur la carte, seule l'option sélectionnée est affichée ; choisissez une autre
+  option dans la liste pour l'afficher à la place.
 - Pour une **boucle automatique**, les points intermédiaires sont générés par
   l'application : les branches strictement parcourues à l'aller et au retour
   sont supprimées sans inventer de raccord, sauf si elles sont nécessaires à
@@ -80,7 +91,11 @@ routage, d'altitude, de météo et OpenStreetMap.
 - La recherche de **Pistes cyclables dans la zone** utilise le rayon autour du
   centre de la carte et affiche uniquement les pistes et voies désignées pour
   les vélos dont les tronçons reliés par des nœuds OpenStreetMap totalisent au
-  moins **3 km**. Les traversées cyclables peuvent relier les tronçons ; les
+  moins **3 km**. Les traversées cyclables peuvent relier les tronçons, et
+  partout en Europe une extrémité de piste située à moins de 60 m d'une autre
+  piste est considérée comme reliée (traversée de route ou rond-point non
+  cartographié). Les rues cyclables (`cyclestreet`, `bicycle_road`) sont
+  incluses. Les
   routes simplement autorisées aux vélos et les bandes sur chaussée ne sont pas
   retenues. Une piste cartographiée le long d'une route peut ne pas avoir de
   géométrie séparée. Un réseau peut comporter des branches : sa longueur
