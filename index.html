@@ -154,7 +154,8 @@
       gap: 4px;
     }
     .mobile-panel-toggle,
-    .mobile-panel-close {
+    .mobile-panel-close,
+    .mobile-map-logo {
       display: none;
     }
     .legend-pill {
@@ -400,25 +401,51 @@
     .floating-bar {
       max-width: calc(100% - 24px);
     }
-    @media (max-width: 820px) {
+    .floating-bar .map-action {
+      padding: 6px 11px;
+      font-size: 12px;
+    }
+    @media (max-width: 820px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
       html, body { overflow: auto; }
       #app-shell {
         display: block;
+        height: 100vh;
         height: 100dvh;
+        min-height: 100vh;
         min-height: 100dvh;
         overflow: hidden;
       }
       #map-container {
         flex: none;
         width: 100%;
+        height: 100vh;
         height: 100dvh;
+        min-height: 100vh;
         min-height: 100dvh;
+        max-height: 100vh;
         max-height: 100dvh;
       }
       #map {
+        height: 100vh !important;
         height: 100dvh !important;
+        min-height: 100vh;
         min-height: 100dvh;
+        max-height: 100vh;
         max-height: 100dvh;
+      }
+      #map .leaflet-top.leaflet-left {
+        top: auto;
+        left: auto;
+        right: 0;
+        bottom: 0;
+      }
+      #map .leaflet-top.leaflet-left .leaflet-control {
+        float: right;
+        margin: 0 10px 10px 0;
+      }
+      #map .leaflet-bottom.leaflet-right .leaflet-control-attribution {
+        max-width: calc(100vw - 64px);
+        margin-right: 50px;
       }
       #sidebar {
         display: none;
@@ -434,13 +461,32 @@
         width: min(420px, 94vw);
         min-width: 0;
         max-width: 94vw;
+        height: 100vh;
         height: 100dvh;
+        max-height: 100vh;
         max-height: 100dvh;
         overflow-y: auto;
         box-shadow: 8px 0 28px rgba(15, 23, 42, 0.3);
       }
       .mobile-panel-close {
         display: inline-flex;
+      }
+      .mobile-map-logo {
+        display: block;
+        position: absolute;
+        bottom: 80px;
+        left: 12px;
+        z-index: 450;
+        width: 64px;
+        max-width: min(18vw, 16vh);
+        height: auto;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+        pointer-events: none;
+      }
+      .mobile-sidebar-open .mobile-map-logo {
+        display: none;
       }
       #app-header {
         position: static;
@@ -450,6 +496,12 @@
         right: 12px;
         justify-content: flex-start;
       }
+      .floating-bar .btn,
+      .floating-bar .layer-btn {
+        font-size: 11px;
+      }
+      .floating-bar .btn { padding: 5px 8px; }
+      .floating-bar .layer-separator { display: none; }
       .legend-pill {
         right: 12px;
         bottom: 12px;
@@ -459,7 +511,7 @@
     @media (max-width: 520px) {
       #sidebar { padding: 8px; }
       #app-header { margin: -8px -8px 0; }
-      .app-logo { width: 160px; max-width: 55%; }
+      .app-logo { width: 145px; max-width: 52%; }
       .app-title { font-size: 15px; }
       .sidebar-section { padding: 10px; }
       .grid-3 { gap: 5px; }
@@ -467,7 +519,7 @@
       .plan-seg { grid-template-columns: repeat(2, 1fr); }
       .floating-bar { top: 8px; left: 8px; right: 8px; }
       .floating-bar .layer-btn { flex: 1 1 calc(25% - 5px); padding: 6px 4px; }
-      #toggle-waymarked { width: 100%; }
+      #toggle-waymarked { width: auto; }
       .legend-pill { display: none; }
     }
     @media (max-width: 390px) {
@@ -475,28 +527,10 @@
       .app-brand > div { flex: none; width: 100%; }
       .app-logo { flex: none; max-width: 100%; }
     }
-    @media (max-width: 820px) and (orientation: landscape) {
-      #app-shell {
-        flex-direction: row;
-        height: 100dvh;
-        min-height: 0;
-        overflow: hidden;
-      }
-      #sidebar {
-        display: none;
-      }
-      #map-container {
-        flex: 1 1 100%;
-        width: 100%;
-        height: 100dvh;
-        min-height: 0;
-        max-height: 100dvh;
-      }
-      #map {
-        height: 100dvh !important;
-        min-height: 0;
-        max-height: 100dvh;
-      }
+    @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+      #app-header .app-logo { width: 130px; }
+      .mobile-map-logo { bottom: 48px; }
+      .legend-pill { display: none; }
     }
   </style>
 </head>
@@ -516,31 +550,6 @@
           <button id="btn-undo-action" type="button" class="btn btn-outline" style="padding:6px 9px;" title="Revenir en arrière (Ctrl+Z)">↩ Retour</button>
           <button id="btn-reset-all" type="button" class="btn" style="padding:6px 9px;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;" title="Réinitialiser entièrement l'application">Reset tout</button>
         </div>
-      </div>
-
-      <!-- Catalogue & Recherche directe de toutes les véloroutes d'Europe -->
-      <div id="catalog-panel" class="card sidebar-section" style="border-color:#ddd6fe;background:#faf5ff;display:flex;flex-direction:column;gap:8px;">
-        <div class="row-between">
-          <span class="label-xs" style="color:#6d28d9;">Catalogue &amp; Recherche Véloroutes Europe</span>
-          <span id="veloroute-count-badge" style="font-size:10px;font-weight:700;background:#7c3aed;color:#fff;padding:2px 7px;border-radius:999px;">Réseau actif</span>
-        </div>
-        <div id="live-scan-status" class="muted-xs" role="status">Traits pointillés : schémas approximatifs du catalogue. Zoomez pour rechercher les itinéraires OSM visibles.</div>
-        <div class="row-gap">
-          <input id="ref-search-input" type="text" class="input-text flex-1" aria-label="Référence ou nom de véloroute" placeholder="Ex : AV, EV3, V40, Loire..." />
-          <button id="btn-find-ref-route" type="button" class="btn btn-purple">Chercher</button>
-        </div>
-        <div id="route-search-results" class="hidden" aria-live="polite"></div>
-        <div class="chip-wrap" id="eurovelo-quick-chips">
-          <button type="button" data-route-id="V52" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">V52 (Paris–Strasbourg)</button>
-          <button type="button" data-route-id="EV6" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV6 (Atlantique–Mer Noire)</button>
-          <button type="button" data-route-id="EV1" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV1 (Vélodyssée)</button>
-          <button type="button" data-route-id="EV17" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV17 (ViaRhôna)</button>
-          <button type="button" data-route-id="EV15" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV15 (Véloroute du Rhin)</button>
-          <button type="button" data-route-id="EV3" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV3 (Scandibérique)</button>
-          <button type="button" data-route-id="EV4" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV4 (Vélomaritime)</button>
-          <button type="button" data-route-id="AVLP" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">Avenue Verte London-Paris</button>
-        </div>
-        <div id="visible-veloroutes-list" style="display:flex;flex-direction:column;gap:5px;max-height:165px;overflow-y:auto;font-size:12px;"></div>
       </div>
 
       <!-- Recherche Ville / Lieu en France & Europe -->
@@ -617,7 +626,7 @@
             </div>
           </div>
           <div class="muted-xs" style="margin-top:5px;color:#334155;">
-            Vert : voie cyclable · Bleu : piste cyclable · Violet : itinéraire vélo · Le point orange montre l’accrochage.
+            Vert : réseaux cyclables reliés d’au moins 3 km · Le point orange montre l’accrochage.
           </div>
         </div>
         <div style="display:flex;justify-content:center;">
@@ -633,7 +642,7 @@
         <div class="row-gap">
           <div class="flex-1">
             <div class="row-between muted-xs" style="margin-bottom:2px;">
-              <span>Rayon autour de la carte / véloroute</span>
+              <label for="radius-slider">Rayon autour du centre de la carte</label>
               <span id="radius-label" style="font-weight:700;color:#0f172a;">15 km</span>
             </div>
             <input id="radius-slider" type="range" min="3" max="40" value="15" style="width:100%;accent-color:#059669;cursor:pointer;" />
@@ -647,6 +656,8 @@
             </button>
           </div>
         </div>
+        <div class="muted-xs">Pistes et voies cyclables reliées : au moins 3 km. <a href="#tracks-panel">Voir les résultats</a></div>
+        <div id="nearby-search-status" class="muted-xs" role="status">En attente de recherche.</div>
 
         <div id="loop-controls" class="hidden card-soft" style="padding:10px;">
           <div id="loop-step-hint" class="muted-xs" style="margin-bottom:6px;font-weight:600;color:#065f46;">
@@ -753,9 +764,13 @@
         <div style="border-top:1px solid #f1f5f9;padding-top:8px;display:flex;flex-direction:column;gap:6px;">
           <div class="row-between">
             <span class="label-xs">Météo & vent sur le parcours</span>
-            <label for="weather-departure" class="muted-xs">Départ</label>
+            <label for="weather-departure-date" class="muted-xs">Départ</label>
           </div>
-          <input id="weather-departure" type="datetime-local" class="input-text" style="font-size:11px;padding:5px 8px;" aria-label="Heure de départ pour les prévisions météo" />
+          <div class="row-gap">
+            <input id="weather-departure-date" type="date" class="input-text flex-1" style="min-width:0;font-size:11px;padding:5px 8px;" aria-label="Date de départ pour les prévisions météo" />
+            <input id="weather-departure-time" type="text" class="input-text" style="width:88px;font-size:11px;padding:5px 8px;" aria-label="Heure de départ au format 24 heures" aria-describedby="weather-time-hint" placeholder="HH:MM" maxlength="5" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" />
+          </div>
+          <div id="weather-time-hint" class="muted-xs">Heure au format 24 h, par exemple 18:30.</div>
           <div id="route-weather-status" class="muted-xs">Tracez ou sélectionnez un parcours pour obtenir les prévisions.</div>
           <div id="route-weather-summary" class="hidden" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;"></div>
           <div id="route-weather-points" style="display:flex;flex-direction:column;gap:4px;"></div>
@@ -779,8 +794,8 @@
           <span style="font-size:12px;font-weight:700;">Pistes cyclables dans la zone</span>
           <span id="circuits-status" class="muted-xs">Prêt</span>
         </div>
-        <div class="muted-xs">Voies et itinéraires cyclables cartographiés dans OpenStreetMap.</div>
-        <div class="muted-xs">La recherche utilise le rayon choisi autour du centre de carte ou de la véloroute sélectionnée.</div>
+        <div class="muted-xs">Pistes et voies désignées pour le vélo, reliées par des nœuds OpenStreetMap et totalisant au moins 3 km. Les réseaux peuvent comporter des branches.</div>
+        <div class="muted-xs">La recherche utilise le rayon choisi autour du centre de la carte.</div>
         <button id="btn-search-nearby-tracks" type="button" class="btn btn-outline">Chercher autour du centre de la carte</button>
         <div id="circuits-list" style="display:flex;flex-direction:column;gap:6px;font-size:12px;max-height:260px;overflow-y:auto;">
           <div style="color:#94a3b8;font-style:italic;">Utilisez « Ma position » ou centrez la carte, choisissez un rayon puis recherchez.</div>
@@ -794,24 +809,50 @@
           <button id="btn-clear-pois" type="button" style="border:none;background:none;color:#64748b;font-size:11px;font-weight:600;cursor:pointer;">Masquer</button>
         </div>
         <div id="poi-buttons" class="chip-wrap">
-          <button type="button" data-poi="tourism" class="poi-btn btn btn-outline" style="padding:4px 9px;font-size:11px;">À visiter</button>
-          <button type="button" data-poi="water" class="poi-btn btn btn-outline" style="padding:4px 9px;font-size:11px;">Eau potable</button>
-          <button type="button" data-poi="restaurant" class="poi-btn btn btn-outline" style="padding:4px 9px;font-size:11px;">Restaurants</button>
-          <button type="button" data-poi="camping" class="poi-btn btn btn-outline" style="padding:4px 9px;font-size:11px;">Campings</button>
-          <button type="button" data-poi="lodging" class="poi-btn btn btn-outline" style="padding:4px 9px;font-size:11px;">Accueil Vélo / Hôtels</button>
-          <button type="button" data-poi="repair" class="poi-btn btn btn-outline" style="padding:4px 9px;font-size:11px;">Réparation</button>
-          <button type="button" data-poi="station" class="poi-btn btn btn-outline" style="padding:4px 9px;font-size:11px;">Gares</button>
+          <button type="button" data-poi="tourism" class="poi-btn btn btn-outline" aria-pressed="false" style="padding:4px 9px;font-size:11px;">À visiter</button>
+          <button type="button" data-poi="water" class="poi-btn btn btn-outline" aria-pressed="false" style="padding:4px 9px;font-size:11px;">Eau potable</button>
+          <button type="button" data-poi="restaurant" class="poi-btn btn btn-outline" aria-pressed="false" style="padding:4px 9px;font-size:11px;">Restaurants</button>
+          <button type="button" data-poi="camping" class="poi-btn btn btn-outline" aria-pressed="false" style="padding:4px 9px;font-size:11px;">Campings</button>
+          <button type="button" data-poi="lodging" class="poi-btn btn btn-outline" aria-pressed="false" style="padding:4px 9px;font-size:11px;">Accueil Vélo / Hôtels</button>
+          <button type="button" data-poi="repair" class="poi-btn btn btn-outline" aria-pressed="false" style="padding:4px 9px;font-size:11px;">Réparation</button>
+          <button type="button" data-poi="station" class="poi-btn btn btn-outline" aria-pressed="false" style="padding:4px 9px;font-size:11px;">Gares</button>
         </div>
-        <div class="muted-xs">Avec un parcours actif, les lieux à moins de 500 m sont repérés et classés selon la distance depuis le départ.</div>
-        <div class="muted-xs" style="color:#92400e;">Recherche gratuite via OpenStreetMap : disponibilité non garantie selon la charge des serveurs. Une solution plus fiable peut nécessiter un service payant ou un serveur dédié.</div>
+        <div id="poi-status" class="muted-xs" role="status">Sélectionnez une catégorie pour rechercher des services.</div>
         <div id="poi-list" style="display:flex;flex-direction:column;gap:6px;max-height:170px;overflow-y:auto;font-size:12px;"></div>
+        <div class="muted-xs">Sans parcours : recherche autour du centre de la carte. Avec un parcours : lieux à moins de 500 m, classés depuis le départ.</div>
+        <div class="muted-xs" style="color:#92400e;">Recherche gratuite via OpenStreetMap : disponibilité non garantie selon la charge des serveurs. Une solution plus fiable peut nécessiter un service payant ou un serveur dédié.</div>
       </div>
 
       <div id="status-banner" class="muted-xs" style="background:#0f172a;color:#f8fafc;border-radius:12px;padding:10px 12px;font-weight:500;">
-        <div id="status-banner-text">CyclOSM actif : pistes bleues, voies vertes et EuroVelo facilement repérables.</div>
+        <div id="status-banner-text">Activez « Voies vertes &amp; pistes » pour afficher les réseaux cyclables reliés d’au moins 3 km.</div>
         <div id="route-download-progress" class="hidden" role="progressbar" aria-label="Téléchargement des parcours" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
           <div id="route-download-progress-bar"></div>
         </div>
+      </div>
+
+      <!-- Catalogue & Recherche directe de toutes les véloroutes d'Europe -->
+      <div id="catalog-panel" class="card sidebar-section" style="border-color:#ddd6fe;background:#faf5ff;display:flex;flex-direction:column;gap:8px;">
+        <div class="row-between">
+          <span class="label-xs" style="color:#6d28d9;">Catalogue &amp; Recherche Véloroutes Europe</span>
+          <span id="veloroute-count-badge" style="font-size:10px;font-weight:700;background:#7c3aed;color:#fff;padding:2px 7px;border-radius:999px;">Réseau actif</span>
+        </div>
+        <div id="live-scan-status" class="muted-xs" role="status">Traits pointillés : schémas approximatifs du catalogue. Zoomez pour rechercher les itinéraires OSM visibles.</div>
+        <div class="row-gap">
+          <input id="ref-search-input" type="text" class="input-text flex-1" aria-label="Référence ou nom de véloroute" placeholder="Ex : AV, EV3, V40, Loire..." />
+          <button id="btn-find-ref-route" type="button" class="btn btn-purple">Chercher</button>
+        </div>
+        <div id="route-search-results" class="hidden" aria-live="polite"></div>
+        <div class="chip-wrap" id="eurovelo-quick-chips">
+          <button type="button" data-route-id="V52" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">V52 (Paris–Strasbourg)</button>
+          <button type="button" data-route-id="EV6" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV6 (Atlantique–Mer Noire)</button>
+          <button type="button" data-route-id="EV1" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV1 (Vélodyssée)</button>
+          <button type="button" data-route-id="EV17" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV17 (ViaRhôna)</button>
+          <button type="button" data-route-id="EV15" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV15 (Véloroute du Rhin)</button>
+          <button type="button" data-route-id="EV3" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV3 (Scandibérique)</button>
+          <button type="button" data-route-id="EV4" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">EV4 (Vélomaritime)</button>
+          <button type="button" data-route-id="AVLP" class="ev-chip btn btn-outline" style="padding:3px 8px;font-size:11px;">Avenue Verte London-Paris</button>
+        </div>
+        <div id="visible-veloroutes-list" style="display:flex;flex-direction:column;gap:5px;max-height:165px;overflow-y:auto;font-size:12px;"></div>
       </div>
     </aside>
 
@@ -819,31 +860,30 @@
       <div class="floating-bar">
         <button id="btn-mobile-panel-open" class="mobile-panel-toggle btn btn-outline" type="button" aria-controls="sidebar" aria-expanded="false">Parcours</button>
         <button type="button" data-layer="osm" class="layer-btn active">Carte routière</button>
-        <button type="button" data-layer="voyager" class="layer-btn">Carte Claire</button>
         <button type="button" data-layer="cyclosm" class="layer-btn">CyclOSM</button>
         <button type="button" data-layer="ign" class="layer-btn">IGN France</button>
         <button type="button" data-layer="ortho" class="layer-btn">Satellite</button>
-        <span style="width:1px;height:20px;background:#cbd5e1;margin:0 4px;"></span>
-        <button id="toggle-waymarked" type="button" class="btn btn-purple" style="padding:6px 11px;font-size:12px;">
+        <span class="layer-separator" aria-hidden="true" style="width:1px;height:20px;background:#cbd5e1;margin:0 4px;"></span>
+        <button id="toggle-waymarked" type="button" class="btn btn-purple map-action">
           ✓ Réseau Véloroutes Europe
         </button>
-        <button id="toggle-identify" type="button" class="btn btn-outline" aria-pressed="false" title="Identifier les véloroutes proches d’un clic sans ajouter d’étape" style="padding:6px 11px;font-size:12px;">
+        <button id="toggle-identify" type="button" class="btn btn-outline map-action" aria-pressed="false" title="Identifier les véloroutes proches d’un clic sans ajouter d’étape">
           Identifier une véloroute
         </button>
-        <button id="toggle-greenways" type="button" class="btn btn-outline" title="Afficher voies vertes et pistes cyclables ; cliquez sur un tracé pour l'identifier" style="padding:6px 11px;font-size:12px;">
+        <button id="toggle-greenways" type="button" class="btn btn-outline map-action" aria-pressed="false" title="Afficher les réseaux de pistes et voies cyclables reliées d’au moins 3 km ; cliquez sur un tracé pour l’identifier">
           Voies vertes &amp; pistes
         </button>
-        <button id="btn-street-view" type="button" class="btn btn-outline" title="Ouvrir Google Street View au dernier point cliqué ou au centre de la carte" style="padding:6px 11px;font-size:12px;">
+        <button id="btn-street-view" type="button" class="btn btn-outline map-action" title="Ouvrir Google Street View au dernier point cliqué ou au centre de la carte">
           Street View
         </button>
         <span id="identify-mode-help" class="muted-xs hidden" role="status">Zoomez puis cliquez près d’un tracé pour choisir une véloroute.</span>
+        <span id="greenways-overlay-status" class="muted-xs hidden" role="status" style="flex:1 0 100%;color:#065f46;"></span>
       </div>
       <div class="legend-pill">
         <span><strong style="color:#c084fc;">━━</strong> EuroVelo (ICN)</span>
         <span><strong style="color:#f43f5e;">━━</strong> Véloroute Nationale (NCN)</span>
         <span><strong style="color:#38bdf8;">━━</strong> Régionale (RCN)</span>
-        <span><strong style="color:#16a34a;">━━</strong> Voie verte</span>
-        <span><strong style="color:#2563eb;">━━</strong> Piste cyclable</span>
+        <span><strong style="color:#10b981;">━━</strong> Réseaux cyclables reliés ≥ 3 km</span>
       </div>
       <div id="map"></div>
     </main>
@@ -1205,14 +1245,19 @@ const SurfaceAnalysis = (() => {
     elements.forEach(way => {
       if (way.type !== 'way' || !Array.isArray(way.nodes) || !cyclingFacilityKind(way.tags || {})) return;
       let geometry = [];
+      let nodeIds = [];
       let missing = false;
       const appendGeometry = () => {
-        if (geometry.length >= 2) ways.push({ type: 'way', id: way.id, tags: way.tags, geometry });
+        if (geometry.length >= 2) ways.push({ type: 'way', id: way.id, tags: way.tags, nodes: nodeIds, geometry });
         geometry = [];
+        nodeIds = [];
       };
       way.nodes.forEach(id => {
         const point = nodes.get(id);
-        if (point) geometry.push(point);
+        if (point) {
+          geometry.push(point);
+          nodeIds.push(id);
+        }
         else {
           missing = true;
           appendGeometry();
@@ -1222,6 +1267,133 @@ const SurfaceAnalysis = (() => {
       if (missing) incomplete++;
     });
     return { elements: ways, incomplete };
+  }
+
+  function connectedCyclingNetworks(elements, minimumMeters) {
+    if (!Array.isArray(elements) || !Number.isFinite(minimumMeters) || minimumMeters < 0) {
+      throw new Error('Données de recherche cyclable incorrectes.');
+    }
+    const candidates = [];
+    const parents = [];
+    const sizes = [];
+    const owners = new Map();
+    let incompleteWays = 0;
+
+    function root(index) {
+      let parent = index;
+      while (parents[parent] !== parent) parent = parents[parent];
+      while (parents[index] !== index) {
+        const next = parents[index];
+        parents[index] = parent;
+        index = next;
+      }
+      return parent;
+    }
+
+    function isCyclingNetworkWay(tags) {
+      const kind = cyclingFacilityKind(tags);
+      if (kind === 'Piste cyclable' || kind === 'Voie cyclable') return true;
+      if (kind === 'Chemin autorisé aux vélos' && tags.footway === 'crossing') return true;
+      return kind === 'Bande ou piste cyclable' &&
+        ['cycleway', 'cycleway:left', 'cycleway:right', 'cycleway:both']
+          .some(key => ['track', 'opposite_track'].includes(tags[key]));
+    }
+
+    for (const element of elements) {
+      if (!element || typeof element !== 'object') {
+        incompleteWays++;
+        continue;
+      }
+      if (element.type !== 'way' || !isCyclingNetworkWay(element.tags || {})) continue;
+      const geometry = element.geometry;
+      const nodes = element.nodes;
+      if (!Number.isSafeInteger(element.id) || !Array.isArray(geometry) || geometry.length < 2 ||
+          !Array.isArray(nodes) || nodes.length !== geometry.length ||
+          !nodes.every(id => Number.isSafeInteger(id) && id > 0) ||
+          !geometry.every(point => point && Number.isFinite(point.lat) && Number.isFinite(point.lon) &&
+            Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180)) {
+        incompleteWays++;
+        continue;
+      }
+      const coords = geometry.map(point => [point.lat, point.lon]);
+      const keys = nodes.map((id, index) => `${id}:${coords[index][0]},${coords[index][1]}`);
+      const index = candidates.length;
+      candidates.push({ id: element.id, tags: element.tags || {}, coords, keys });
+      parents.push(index);
+      sizes.push(1);
+      keys.forEach(key => {
+        if (owners.has(key)) {
+          let previous = root(owners.get(key));
+          let current = root(index);
+          if (previous !== current) {
+            if (sizes[previous] < sizes[current]) [previous, current] = [current, previous];
+            parents[current] = previous;
+            sizes[previous] += sizes[current];
+          }
+        } else {
+          owners.set(key, index);
+        }
+      });
+    }
+
+    const groups = new Map();
+    const seenEdges = new Set();
+    candidates.forEach((candidate, index) => {
+      const key = root(index);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          id: candidate.id, segments: [], distanceMeters: 0,
+          names: new Map(), surfaces: new Set()
+        });
+      }
+      const group = groups.get(key);
+      let run = [candidate.coords[0]];
+      let addedMeters = 0;
+      const appendRun = () => {
+        if (run.length >= 2) group.segments.push(run);
+      };
+      for (let i = 1; i < candidate.coords.length; i++) {
+        const from = candidate.keys[i - 1], to = candidate.keys[i];
+        const edge = from < to ? `${from}|${to}` : `${to}|${from}`;
+        const span = distance(candidate.coords[i - 1], candidate.coords[i]);
+        if (from === to || span === 0 || seenEdges.has(edge)) {
+          appendRun();
+          run = [candidate.coords[i]];
+          continue;
+        }
+        seenEdges.add(edge);
+        addedMeters += span;
+        run.push(candidate.coords[i]);
+      }
+      appendRun();
+      if (!addedMeters) return;
+      group.distanceMeters += addedMeters;
+      const name = String(candidate.tags.name || candidate.tags.ref || '').trim();
+      if (name) {
+        const normalized = name.toLowerCase();
+        const entry = group.names.get(normalized) || { name, distanceMeters: 0 };
+        entry.distanceMeters += addedMeters;
+        group.names.set(normalized, entry);
+      }
+      group.surfaces.add(String(candidate.tags.surface || 'Non renseigné'));
+    });
+
+    const networks = [];
+    for (const group of groups.values()) {
+      if (group.distanceMeters < minimumMeters) continue;
+      const names = [...group.names.values()].sort((a, b) => b.distanceMeters - a.distanceMeters);
+      networks.push({
+        id: group.id,
+        name: names.length ? `${names[0].name}${names.length > 1 ? ' et voies reliées' : ''}` : 'Pistes et voies cyclables reliées',
+        named: names.length > 0,
+        kind: 'Pistes et voies cyclables reliées',
+        network: 'OpenStreetMap',
+        surface: group.surfaces.size === 1 ? [...group.surfaces][0] : 'Mixte ou non renseigné',
+        segments: group.segments,
+        distanceMeters: group.distanceMeters
+      });
+    }
+    return { networks, incompleteWays };
   }
 
   function fromBRouter(rawCoords, displayedCoords, messages) {
@@ -1442,7 +1614,7 @@ const SurfaceAnalysis = (() => {
     return meters;
   }
 
-  return { MAX_DISTANCE_METERS, distance, length, classify, cyclingFacilityKind, cyclingWaysFromOsmMap, fromBRouter, buildQuery, analyze };
+  return { MAX_DISTANCE_METERS, distance, length, classify, cyclingFacilityKind, cyclingWaysFromOsmMap, connectedCyclingNetworks, fromBRouter, buildQuery, analyze };
 })();
   </script>
   <script>
@@ -1655,7 +1827,16 @@ const VeloProject = (() => {
     const form = object(value.form, 'formulaire manquant.');
     if (!Array.isArray(form.via) || form.via.length > 100) invalid('étapes du formulaire incorrectes.');
     const weatherDeparture = text(settings.weatherDeparture, 'date météo incorrecte.', 30);
-    if (weatherDeparture && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(weatherDeparture)) invalid('date météo incorrecte.');
+    if (weatherDeparture) {
+      if (!/^(?!0000)\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/.test(weatherDeparture)) {
+        invalid('date météo incorrecte.');
+      }
+      const day = weatherDeparture.slice(0, 10);
+      const parsedDay = new Date(`${day}T12:00:00Z`);
+      if (!Number.isFinite(parsedDay.getTime()) || parsedDay.toISOString().slice(0, 10) !== day) {
+        invalid('date météo incorrecte.');
+      }
+    }
     if (!Array.isArray(value.alternatives) || value.alternatives.length > 3) invalid('variantes incorrectes.');
     const alternatives = value.alternatives.map(item => alternative(item, budget));
     const selectedAlternativeIndex = number(value.selectedAlternativeIndex, 'variante sélectionnée incorrecte.', -1, 2);
@@ -1978,6 +2159,7 @@ const VeloGeocoding = (() => {
     const drawWaypointEvents = new WeakSet();
 
     const OVERPASS_ENDPOINTS = [
+      'https://overpass.openstreetmap.fr/api/interpreter',
       'https://overpass.kumi.systems/api/interpreter',
       'https://overpass.private.coffee/api/interpreter',
       'https://overpass-api.de/api/interpreter'
@@ -2015,7 +2197,6 @@ const VeloGeocoding = (() => {
     }
 
     const ESRI_STREET_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
-    const ESRI_LIGHT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
     const ESRI_IMAGERY_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
     const IGN_PLAN_URL = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
     const layers = {
@@ -2026,11 +2207,6 @@ const VeloGeocoding = (() => {
           attribution: '&copy; Esri, OpenStreetMap contributors'
         },
         [IGN_PLAN_URL]
-      ),
-      voyager: makeSafeTileLayer(
-        ESRI_LIGHT_URL,
-        { maxZoom: 19, attribution: '&copy; Esri, OpenStreetMap' },
-        [ESRI_STREET_URL]
       ),
       cyclosm: L.layerGroup([
         makeSafeTileLayer(ESRI_STREET_URL, { maxZoom: 19, attribution: '&copy; Esri' }, [IGN_PLAN_URL]),
@@ -2064,16 +2240,6 @@ const VeloGeocoding = (() => {
         setStatus('Le calque des véloroutes ne se charge pas. Vérifiez la connexion et réessayez.');
       }
     });
-    const cyclosmGreenwaysOverlay = L.tileLayer(
-      'https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
-      {
-        maxZoom: 20,
-        opacity: 0.95,
-        zIndex: 430,
-        attribution: '&copy; CyclOSM / OpenStreetMap contributors'
-      }
-    );
-
     function updateWaymarkedLayerOpacity() {
       waymarkedCyclingOverlay.setOpacity(state.planMode === 'draw' && !identifyingVeloroutes ? 0.12 : 0.92);
     }
@@ -2211,7 +2377,6 @@ const VeloGeocoding = (() => {
         routeLayerGroup.clearLayers();
       editableRouteHandlesGroup.clearLayers();
         activeVelorouteGroup.clearLayers();
-        circuitsLayerGroup.clearLayers();
         updateStatsUI(null);
       }
       setStatus(`Action annulée (${state.historyStack.length} étape(s) restante(s) dans l'historique).`);
@@ -2225,7 +2390,7 @@ const VeloGeocoding = (() => {
       state.activeRouteCoords = [];
       state.circuits = [];
       state.selectedCircuitIdx = -1;
-      state.activePoiCategory = null;
+      setActivePoiCategory(null);
       state.selectedRouteId = null;
       state.activeMapSelection = null;
       routeSheetRequestId++;
@@ -2238,8 +2403,8 @@ const VeloGeocoding = (() => {
       placeActivationRequestId++;
       state.greenwaysEnabled = false;
       clearRouteAlternatives();
-      poiRequestId++;
-      greenwaysRequestId++;
+      cancelPoiRequest();
+      cancelGreenwaysRequest();
       cancelLocalCircuitSearch();
 
       routeLayerGroup.clearLayers();
@@ -2250,12 +2415,12 @@ const VeloGeocoding = (() => {
       greenwaysSnapSegments = [];
       projectedGreenwaysSnapSegments = [];
       greenwaysLoaded = false;
-      greenwaysLoaded = true;
+      greenwaysLoadFailed = false;
+      state.greenwaysCount = 0;
       if (drawSnapMarker) {
         map.removeLayer(drawSnapMarker);
         drawSnapMarker = null;
       }
-      map.removeLayer(cyclosmGreenwaysOverlay);
       waypointsLayerGroup.clearLayers();
       poiLayerGroup.clearLayers();
       map.removeLayer(dplusMarker);
@@ -2263,9 +2428,11 @@ const VeloGeocoding = (() => {
       map.closePopup();
 
       document.getElementById('track-detail-card').classList.add('hidden');
-      document.getElementById('poi-list').innerHTML = '';
+      document.getElementById('poi-list').replaceChildren();
+      document.getElementById('poi-status').textContent = 'Sélectionnez une catégorie pour rechercher des services.';
       document.getElementById('circuits-list').textContent = 'Utilisez « Ma position » ou centrez la carte, choisissez un rayon puis recherchez.';
       document.getElementById('circuits-status').textContent = 'Prêt';
+      setNearbySearchStatus('En attente de recherche.');
       searchAreaLayerGroup.clearLayers();
       document.getElementById('ref-search-input').value = '';
       document.getElementById('route-search-results').replaceChildren();
@@ -2285,8 +2452,10 @@ const VeloGeocoding = (() => {
       document.getElementById('draw-mode-banner').classList.add('hidden');
       const toggleGreenwaysBtn = document.getElementById('toggle-greenways');
       toggleGreenwaysBtn.textContent = 'Voies vertes & pistes';
+      toggleGreenwaysBtn.setAttribute('aria-pressed', 'false');
       toggleGreenwaysBtn.classList.remove('btn-accent');
       toggleGreenwaysBtn.classList.add('btn-outline');
+      setGreenwaysOverlayStatus('');
       const toggleWaymarkedBtn = document.getElementById('toggle-waymarked');
       toggleWaymarkedBtn.textContent = '✓ Réseau Véloroutes Europe';
       toggleWaymarkedBtn.classList.add('btn-purple');
@@ -2606,7 +2775,7 @@ const VeloGeocoding = (() => {
       return preserveWaypoints(pruneRouteSpikesAndUTurns(result));
     }
 
-    async function prepareRoutedGeometry(rawCoords, waypoints, automaticLoop) {
+    async function prepareRoutedGeometry(rawCoords, waypoints, automaticLoop, requiredStops = []) {
       const cleaned = await sanitizeAndRepairOffRoadShortcuts(rawCoords, waypoints);
       if (!automaticLoop) return cleaned;
       if (!Array.isArray(cleaned) || cleaned.length < 2 || !cleaned.every(point =>
@@ -2615,7 +2784,11 @@ const VeloGeocoding = (() => {
         console.warn('Boucle rejetée : géométrie invalide.');
         return null;
       }
-      const loop = RouteGeometry.removeRetracedSpurs(cleaned);
+      let loop = RouteGeometry.removeRetracedSpurs(cleaned);
+      if (requiredStops.length && (loop.length < 4 ||
+          !RouteGeometry.preservesWaypoints(cleaned, loop, requiredStops))) {
+        loop = cleaned;
+      }
       if (loop.length < 4 || haversineMeters(loop[0], loop[loop.length - 1]) > 50) {
         console.warn('Boucle rejetée : aucun parcours fermé après suppression des allers-retours.');
         return null;
@@ -2652,7 +2825,7 @@ const VeloGeocoding = (() => {
       });
     }
 
-    async function fetchOsrmRoute(coordsLatLng, profile = 'bike', alternativeIndex = 0, includeFallback = true, profileOverride = null, automaticLoop = false) {
+    async function fetchOsrmRoute(coordsLatLng, profile = 'bike', alternativeIndex = 0, includeFallback = true, profileOverride = null, automaticLoop = false, requiredStops = []) {
       if (!Array.isArray(coordsLatLng) || coordsLatLng.length < 2) return null;
       const coordStr = coordsLatLng.map(p => `${p[1].toFixed(6)},${p[0].toFixed(6)}`).join(';');
       const bikeCoords = coordsLatLng.map(p => `${p[1].toFixed(6)},${p[0].toFixed(6)}`).join('|');
@@ -2661,10 +2834,25 @@ const VeloGeocoding = (() => {
         gravel: 'gravel',
         vtc: 'trekking'
       }[state.practice] || 'trekking');
+      const bikeQuery = new URLSearchParams({
+        lonlats: bikeCoords,
+        profile: brouterProfile,
+        alternativeidx: String(alternativeIndex),
+        format: 'geojson'
+      });
+      const preferences = brouterProfile === 'gravel'
+        ? { prefer_cycle_routes: 1, consider_traffic_estimate: 1 }
+        : { avoid_unsafe: 1, stick_to_cycleroutes: 1, consider_traffic: 1, allow_steps: 0 };
+      Object.entries(preferences).forEach(([name, value]) => {
+        bikeQuery.set(`profile:${name}`, String(value));
+      });
+      if (brouterProfile === 'trekking' && state.practice === 'road') {
+        bikeQuery.set('profile:unpavedPenalty', '4');
+      }
       const requests = profile === 'bike'
         ? [
             {
-              url: `https://brouter.de/brouter?lonlats=${encodeURIComponent(bikeCoords)}&profile=${encodeURIComponent(brouterProfile)}&alternativeidx=${alternativeIndex}&format=geojson`,
+              url: `https://brouter.de/brouter?${bikeQuery.toString()}`,
               provider: 'brouter',
               profile: brouterProfile,
               alternativeIndex
@@ -2672,10 +2860,6 @@ const VeloGeocoding = (() => {
             ...(alternativeIndex === 0 && includeFallback ? [
               {
                 url: `https://routing.openstreetmap.de/routed-bike/route/v1/driving/${coordStr}?overview=full&geometries=geojson`,
-                provider: 'osrm-bike-fallback'
-              },
-              {
-                url: `https://router.project-osrm.org/route/v1/cycling/${coordStr}?overview=full&geometries=geojson`,
                 provider: 'osrm-bike-fallback'
               }
             ] : [])
@@ -2686,8 +2870,11 @@ const VeloGeocoding = (() => {
           }];
       for (const request of requests) {
         try {
-          const res = await fetchWithTimeout(request.url, {}, coordsLatLng.length > 20 ? 12000 : 5000);
-          if (!res.ok) continue;
+          const res = await fetchWithTimeout(request.url, {}, request.provider === 'brouter' ? 30000 : 8000);
+          if (!res.ok) {
+            console.warn(`Routage ${request.provider} indisponible : HTTP ${res.status}.`);
+            continue;
+          }
           const json = await res.json();
           if (request.provider === 'brouter') {
             const feature = json.features && json.features.find(item =>
@@ -2695,7 +2882,7 @@ const VeloGeocoding = (() => {
             );
             if (!feature) continue;
             const rawCoords = feature.geometry.coordinates.map(c => [c[1], c[0]]);
-            const coords = await prepareRoutedGeometry(rawCoords, coordsLatLng, automaticLoop);
+            const coords = await prepareRoutedGeometry(rawCoords, coordsLatLng, automaticLoop, requiredStops);
             if (!coords) continue;
             const rawDistanceMeters = Number(feature.properties && (
               feature.properties['track-length'] || feature.properties.distance
@@ -2721,7 +2908,7 @@ const VeloGeocoding = (() => {
           }
           if (json.code === 'Ok' && json.routes && json.routes[0] && json.routes[0].geometry) {
             const rawCoords = json.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-            const coords = await prepareRoutedGeometry(rawCoords, coordsLatLng, automaticLoop);
+            const coords = await prepareRoutedGeometry(rawCoords, coordsLatLng, automaticLoop, requiredStops);
             if (!coords) continue;
             const distanceMeters = routeCoordsDiffer(coords, rawCoords)
               ? computeCoordsDistanceMeters(coords)
@@ -2734,14 +2921,15 @@ const VeloGeocoding = (() => {
               alternativeIndex
             };
           }
-        } catch (_) {
+        } catch (error) {
+          console.warn(`Routage ${request.provider} indisponible :`, error);
           continue;
         }
       }
       return null;
     }
 
-    async function fetchOsrmBikeAlternatives(coordsLatLng, automaticLoop = false) {
+    async function fetchOsrmBikeAlternatives(coordsLatLng, automaticLoop = false, requiredStops = []) {
       if (!Array.isArray(coordsLatLng) || coordsLatLng.length < 2) return [];
       const coordStr = coordsLatLng.map(point => `${point[1].toFixed(6)},${point[0].toFixed(6)}`).join(';');
       const query = new URLSearchParams({
@@ -2762,7 +2950,7 @@ const VeloGeocoding = (() => {
           .filter(route => route.geometry && Array.isArray(route.geometry.coordinates));
         return (await Promise.all(rawCandidates.map(async (route, index) => {
             const rawCoords = route.geometry.coordinates.map(point => [point[1], point[0]]);
-            const coords = await prepareRoutedGeometry(rawCoords, coordsLatLng, automaticLoop);
+            const coords = await prepareRoutedGeometry(rawCoords, coordsLatLng, automaticLoop, requiredStops);
             if (!coords) return null;
             const distanceMeters = routeCoordsDiffer(coords, rawCoords)
               ? computeCoordsDistanceMeters(coords)
@@ -3261,7 +3449,7 @@ const VeloGeocoding = (() => {
       return longestSingleJumpMeters <= 30000;
     }
 
-    async function fetchOsrmRouteAlternatives(coordsLatLng, onProgress = null, automaticLoop = false) {
+    async function fetchOsrmRouteAlternatives(coordsLatLng, onProgress = null, automaticLoop = false, requiredStops = []) {
       const uniqueRoutes = [];
       const signatures = new Set();
       const updateProgress = percent => {
@@ -3281,47 +3469,57 @@ const VeloGeocoding = (() => {
         uniqueRoutes.push(route);
       };
 
-      const [primaryRoute, alt1, alt2, alt3, osrmCandidates] = await Promise.all([
-        fetchOsrmRoute(coordsLatLng, 'bike', 0, true, null, automaticLoop),
-        fetchOsrmRoute(coordsLatLng, 'bike', 1, false, null, automaticLoop),
-        fetchOsrmRoute(coordsLatLng, 'bike', 2, false, null, automaticLoop),
-        fetchOsrmRoute(coordsLatLng, 'bike', 3, false, null, automaticLoop),
-        fetchOsrmBikeAlternatives(coordsLatLng, automaticLoop)
+      const [primaryRoute, alt1, alt2, alt3] = await Promise.all([
+        fetchOsrmRoute(coordsLatLng, 'bike', 0, true, null, automaticLoop, requiredStops),
+        fetchOsrmRoute(coordsLatLng, 'bike', 1, false, null, automaticLoop, requiredStops),
+        fetchOsrmRoute(coordsLatLng, 'bike', 2, false, null, automaticLoop, requiredStops),
+        fetchOsrmRoute(coordsLatLng, 'bike', 3, false, null, automaticLoop, requiredStops)
       ]);
       updateProgress(84);
       [primaryRoute, alt1, alt2, alt3].forEach(addIfUnique);
-      osrmCandidates.forEach(addIfUnique);
       updateProgress(92);
       const selectedProfile = {
         road: 'trekking',
         gravel: 'gravel',
         vtc: 'trekking'
       }[state.practice] || 'trekking';
-      for (const profile of ['fastbike', 'trekking', 'gravel']) {
+      for (const profile of ['trekking', 'gravel']) {
         if (selectDistinctRouteProposals(uniqueRoutes).length >= ROUTE_ALTERNATIVE_COUNT) break;
         if (profile === selectedProfile) continue;
-        const route = await fetchOsrmRoute(coordsLatLng, 'bike', 0, false, profile, automaticLoop);
+        const route = await fetchOsrmRoute(coordsLatLng, 'bike', 0, false, profile, automaticLoop, requiredStops);
         if (route) {
           route.provider = 'brouter-profile-fallback';
           addIfUnique(route);
         }
       }
-      uniqueRoutes.sort((a, b) => {
-        const priority = route => route.provider === 'brouter'
-          ? 0
-          : (route.provider === 'osrm-bike-fallback' ? 1 : 2);
-        const providerOrder = priority(a) - priority(b);
-        return providerOrder || (a.alternativeIndex || 0) - (b.alternativeIndex || 0);
-      });
+      if (!uniqueRoutes.some(route => route.provider === 'brouter' || route.provider === 'brouter-profile-fallback')) {
+        (await fetchOsrmBikeAlternatives(coordsLatLng, automaticLoop, requiredStops)).forEach(addIfUnique);
+      }
+      uniqueRoutes.sort(compareRoutePreferences);
       return uniqueRoutes;
+    }
+
+    function compareRoutePreferences(a, b) {
+      const isBRouter = route => route.provider === 'brouter' || route.provider === 'brouter-profile-fallback';
+      const providerOrder = Number(isBRouter(b)) - Number(isBRouter(a));
+      if (providerOrder) return providerOrder;
+      const cyclingShare = route => {
+        const surface = route.surfaceSummary || (route.enriched && route.enriched.surfaceSummary);
+        return surface && surface.totalMeters > 0 && Number.isFinite(surface.cyclingMeters)
+          ? Math.min(1, Math.max(0, surface.cyclingMeters / surface.totalMeters))
+          : 0;
+      };
+      return cyclingShare(b) - cyclingShare(a) ||
+        (a.alternativeIndex || 0) - (b.alternativeIndex || 0);
     }
 
     function selectDistinctRouteProposals(candidates) {
       if (!candidates.length) return [];
-      const selected = [candidates[0]];
-      const remaining = candidates.slice(1);
+      const ordered = candidates.slice().sort(compareRoutePreferences);
+      const selected = [ordered[0]];
+      const remaining = ordered.slice(1);
       while (selected.length < ROUTE_ALTERNATIVE_COUNT && remaining.length) {
-        let bestIndex = -1, bestScore = -1, bestHasCycling = false;
+        let bestIndex = -1, bestScore = -1;
         remaining.forEach((candidate, index) => {
           const comparisons = selected.map(route =>
             RouteGeometry.routeDifference(candidate.coords, route.coords, haversineMeters));
@@ -3329,13 +3527,10 @@ const VeloGeocoding = (() => {
           const candidateLength = SurfaceAnalysis.length(candidate.coords);
           const score = Math.min(...comparisons.map((comparison, routeIndex) =>
             comparison.differentMeters / Math.min(candidateLength, SurfaceAnalysis.length(selected[routeIndex].coords))));
-          const hasCycling = Boolean(candidate.surfaceSummary &&
-            Number.isFinite(candidate.surfaceSummary.cyclingMeters) && candidate.surfaceSummary.cyclingMeters > 0);
-          if (bestIndex === -1 || (hasCycling && !bestHasCycling) ||
-              (hasCycling === bestHasCycling && score > bestScore)) {
+          const preference = bestIndex === -1 ? -1 : compareRoutePreferences(candidate, remaining[bestIndex]);
+          if (bestIndex === -1 || preference < 0 || (preference === 0 && score > bestScore)) {
             bestIndex = index;
             bestScore = score;
-            bestHasCycling = hasCycling;
           }
         });
         if (bestIndex === -1) break;
@@ -3631,11 +3826,11 @@ const VeloGeocoding = (() => {
 
     function routingPreferenceDescription() {
       const descriptions = {
-        road: 'Profil Route : privilégie le revêtement dur et évite les grands axes lorsque le réseau le permet.',
-        gravel: 'Profil Gravel : privilégie les pistes et chemins adaptés, en limitant la circulation motorisée.',
-        vtc: 'Profil VTC : privilégie les voies cyclables et les routes calmes avec un revêtement mixte.'
+        road: 'Profil Route : priorité aux pistes cyclables, voies vertes et véloroutes ; pénalise les grands axes et les chemins non revêtus.',
+        gravel: 'Profil Gravel : priorité aux véloroutes, pistes et chemins adaptés ; tient compte des estimations de circulation disponibles.',
+        vtc: 'Profil VTC : priorité aux pistes cyclables, voies vertes et véloroutes ; pénalise les grands axes sans indication cyclable.'
       };
-      return descriptions[state.practice] || descriptions.vtc;
+      return `${descriptions[state.practice] || descriptions.vtc} Les petites routes servent aux raccordements. L’absence de nationales n’est pas garantie : vérifiez le tracé avant le départ.`;
     }
 
     function routingResultDescription(route) {
@@ -3645,7 +3840,7 @@ const VeloGeocoding = (() => {
       if (route && route.provider === 'brouter-profile-fallback') {
         return `BRouter, profil vélo alternatif ${route.routingProfile}`;
       }
-      if (route) return 'OSRM, profil vélo de secours (préférences du mode moins précises)';
+      if (route) return 'OSRM vélo de secours : priorité aux voies vertes et évitement des grands axes non garantis';
       return 'routage vélo indisponible';
     }
 
@@ -3879,15 +4074,19 @@ const VeloGeocoding = (() => {
       summary.classList.add('hidden');
       pointsList.replaceChildren();
 
+      const departureValue = getWeatherDepartureValue();
+      if (departureValue === null) {
+        status.textContent = 'Saisissez une date et une heure valides au format 24 h (HH:MM).';
+        return;
+      }
       if (!routeObj || !Array.isArray(routeObj.points) || routeObj.points.length < 2) {
         status.textContent = 'Tracez ou sélectionnez un parcours pour obtenir les prévisions.';
         return;
       }
 
-      const departureInput = document.getElementById('weather-departure');
-      const departure = new Date(departureInput.value);
-      if (!departureInput.value || !Number.isFinite(departure.getTime())) {
-        status.textContent = 'Choisissez une heure de départ valide.';
+      const departure = new Date(departureValue);
+      if (!departureValue || !Number.isFinite(departure.getTime())) {
+        status.textContent = 'Choisissez une date et une heure de départ valides.';
         return;
       }
 
@@ -4143,9 +4342,10 @@ const VeloGeocoding = (() => {
         refreshRouteSurfaces(null);
         setRouteDirectionPaths([]);
         if (state.activePoiCategory) {
-          poiRequestId++;
+          cancelPoiRequest();
           poiLayerGroup.clearLayers();
-          document.getElementById('poi-list').textContent = 'Le parcours a été effacé. Sélectionnez une catégorie pour rechercher autour de la carte.';
+          document.getElementById('poi-list').replaceChildren();
+          document.getElementById('poi-status').textContent = 'Le parcours a été effacé. Cliquez à nouveau sur une catégorie pour rechercher autour de la carte.';
         }
         refreshRouteWeather(null);
         drawElevationProfile();
@@ -5218,8 +5418,28 @@ const VeloGeocoding = (() => {
       return { elements: null, error: lastError };
     }
 
+    const MIN_CONNECTED_CYCLEWAY_METERS = 3000;
     let greenwaysRequestId = 0;
+    let greenwaysRequestController = null;
     let greenwaysSearchTimer = null;
+
+    function cancelGreenwaysRequest() {
+      greenwaysRequestId++;
+      if (greenwaysRequestController) greenwaysRequestController.abort();
+      greenwaysRequestController = null;
+      if (greenwaysSearchTimer) clearTimeout(greenwaysSearchTimer);
+      greenwaysSearchTimer = null;
+    }
+
+    function buildCyclingNetworkQuery(around) {
+      return `[out:json][timeout:20];(way(${around})["highway"="cycleway"];way(${around})["highway"~"^(path|footway|pedestrian|track)$"]["bicycle"="designated"];way(${around})["footway"="crossing"]["bicycle"~"^(yes|designated|permissive)$"];way(${around})["cycleway"~"^(track|opposite_track)$"];way(${around})["cycleway:left"~"^(track|opposite_track)$"];way(${around})["cycleway:right"~"^(track|opposite_track)$"];way(${around})["cycleway:both"~"^(track|opposite_track)$"];);out body geom;`;
+    }
+
+    function setGreenwaysOverlayStatus(message) {
+      const el = document.getElementById('greenways-overlay-status');
+      el.textContent = message;
+      el.classList.toggle('hidden', !message);
+    }
 
     function rebuildGreenwaySnapIndex() {
       projectedGreenwaysSnapSegments = greenwaysSnapSegments.map(coords =>
@@ -5319,7 +5539,7 @@ const VeloGeocoding = (() => {
               : (greenwaysSnapSegments.length
                 ? 'Aucune voie proche — zoomez ou placez une étape libre'
                 : (greenwaysLoaded
-                  ? 'Aucune géométrie cyclable chargée dans cette zone'
+                  ? 'Aucun réseau cyclable relié d’au moins 3 km dans cette zone'
                   : 'Chargement des voies cyclables pour l’accrochage...'));
           }
         }
@@ -5328,123 +5548,117 @@ const VeloGeocoding = (() => {
 
     async function loadVisibleGreenways() {
       if (!state.greenwaysEnabled) return;
-      if (map.getZoom() < 9) {
-        setStatus('Zoomez sur une zone précise pour afficher les voies vertes OpenStreetMap.');
+      cancelGreenwaysRequest();
+      if (map.getZoom() < 12) {
+        greenwaysLayerGroup.clearLayers();
+        greenwaysSnapSegments = [];
+        projectedGreenwaysSnapSegments = [];
+        greenwaysLoaded = false;
+        greenwaysLoadFailed = false;
+        state.greenwaysCount = 0;
+        setGreenwaysOverlayStatus('Zoomez sur une zone précise pour afficher les réseaux cyclables reliés d’au moins 3 km.');
         return 0;
       }
-      const requestId = ++greenwaysRequestId;
+      const requestId = greenwaysRequestId;
+      const controller = new AbortController();
+      greenwaysRequestController = controller;
       greenwaysLoadFailed = false;
       greenwaysLoaded = false;
-      const center = map.getCenter();
+      const center = map.wrapLatLng(map.getCenter());
       const lat = center.lat.toFixed(5);
       const lng = center.lng.toFixed(5);
-      const radiusM = map.getZoom() >= 13 ? 6000 : 10000;
-
-      setStatus('Recherche des voies vertes autour de la zone affichée...');
-      const ql = `[out:json][timeout:8];(way(around:${radiusM},${lat},${lng})["highway"="cycleway"];way(around:${radiusM},${lat},${lng})["bicycle"~"^(yes|designated|permissive)$"];way(around:${radiusM},${lat},${lng})["highway"="path"]["bicycle"!="no"];way(around:${radiusM},${lat},${lng})["cycleway"];relation(around:${radiusM},${lat},${lng})["route"="bicycle"];);out body geom;`;
-      const result = await queryOverpassWithStatus(ql, null, 2800);
-      if (requestId !== greenwaysRequestId || !state.greenwaysEnabled) return;
+      const bounds = map.getBounds();
+      const viewRadius = Math.max(map.distance(center, bounds.getNorthEast()), map.distance(center, bounds.getSouthWest()));
+      const radiusM = Math.ceil(Math.min(20000, Math.max(6000, viewRadius)) / 1000) * 1000;
+      const coverageMessage = viewRadius > radiusM
+        ? ' Vue partiellement couverte : zoomez pour rechercher sur toute la carte.'
+        : '';
+      const ql = buildCyclingNetworkQuery(`around:${radiusM},${lat},${lng}`);
+      const result = await queryOverpassWithStatus(ql, attempt => {
+        if (requestId === greenwaysRequestId) {
+          setGreenwaysOverlayStatus(`Recherche des réseaux cyclables d’au moins 3 km : serveur ${attempt}/${OVERPASS_ENDPOINTS.length}...`);
+        }
+      }, 24000, controller.signal);
+      if (requestId !== greenwaysRequestId || !state.greenwaysEnabled) return 0;
+      greenwaysRequestController = null;
 
       if (!result.elements) {
         greenwaysLoadFailed = true;
-        setStatus(`${result.error} Activez une carte locale puis réessayez.`);
+        const previous = greenwaysLayerGroup.getLayers().length
+          ? ' Les tracés précédents restent affichés.'
+          : '';
+        setGreenwaysOverlayStatus(`${result.error} Déplacez la carte pour réessayer.${previous}`);
         return 0;
       }
 
+      const analysis = SurfaceAnalysis.connectedCyclingNetworks(result.elements, MIN_CONNECTED_CYCLEWAY_METERS);
       greenwaysLayerGroup.clearLayers();
-      greenwaysSnapSegments = [];
+      greenwaysSnapSegments = analysis.networks.flatMap(network => network.segments);
       projectedGreenwaysSnapSegments = [];
-      greenwaysLoaded = false;
-      const seen = new Set();
-      let count = 0;
-      for (const el of result.elements) {
-        let segments = [];
-        if (el.type === 'way' && Array.isArray(el.geometry) && el.geometry.length >= 2) {
-          segments = [el.geometry.map(p => [p.lat, p.lon])];
-        } else if (Array.isArray(el.members)) {
-          segments = el.members
-            .filter(m => m.type === 'way' && Array.isArray(m.geometry) && m.geometry.length >= 2)
-            .map(m => m.geometry.map(p => [p.lat, p.lon]));
-        }
-        segments.forEach((coords, segmentIndex) => {
-          const key = `${el.type}-${el.id}-${segmentIndex}`;
-          if (seen.has(key)) return;
-          seen.add(key);
-          greenwaysSnapSegments.push(coords);
-          const tags = el.tags || {};
-          const isBicycleRoute = el.type === 'relation' && tags.route === 'bicycle';
-          const hasCyclewayTag = Boolean(tags.cycleway || tags['cycleway:left'] || tags['cycleway:right'] || tags['cycleway:both']);
-          const featureType = isBicycleRoute
-            ? 'Itinéraire cyclable'
-            : (tags.highway === 'cycleway'
-              ? 'Piste cyclable'
-              : (hasCyclewayTag
-                ? 'Aménagement cyclable'
-                : (tags.highway === 'path' ? 'Voie cyclable' : 'Voie autorisée aux vélos')));
-          const name = tags.name || tags.ref || featureType;
-          const lineColor = isBicycleRoute ? '#7c3aed' : (tags.highway === 'cycleway' || hasCyclewayTag ? '#2563eb' : '#16a34a');
-          const casingLine = L.polyline(coords, {
-            pane: 'cyclingInfrastructurePane',
-            color: '#ffffff',
-            weight: 13,
-            opacity: 1,
-            interactive: false,
-            lineCap: 'round',
-            lineJoin: 'round'
-          });
-          const visibleLine = L.polyline(coords, {
-            pane: 'cyclingInfrastructurePane',
-            color: lineColor,
-            weight: 8,
-            opacity: 1,
-            interactive: true,
-            lineCap: 'round',
-            lineJoin: 'round'
-          });
-          const hitLine = L.polyline(coords, {
-            pane: 'cyclingInfrastructurePane',
-            color: '#ffffff',
-            weight: 28,
-            opacity: 0.01,
-            interactive: true
-          });
-          const popup = document.createElement('div');
-          const title = document.createElement('strong');
-          title.textContent = name;
-          const details = document.createElement('div');
-          details.textContent = [
-            tags.highway || (el.type === 'relation' ? 'Itinéraire cyclable' : 'Voie cyclable'),
-            tags.surface && `Revêtement : ${tags.surface}`,
-            tags.bicycle && `Vélo : ${tags.bicycle}`,
-            (tags.cycleway || tags['cycleway:left'] || tags['cycleway:right'] || tags['cycleway:both']) &&
-              `Aménagement : ${tags.cycleway || tags['cycleway:left'] || tags['cycleway:right'] || tags['cycleway:both']}`,
-            tags.network && `Réseau : ${tags.network}`,
-            `OpenStreetMap ${el.type}/${el.id}`
-          ].filter(Boolean).join(' · ');
-          popup.append(title, details);
-          visibleLine.bindTooltip(`${featureType} — ${name}`, { sticky: true });
-          visibleLine.bindPopup(popup);
-          hitLine.bindPopup(popup);
-          const stopMapClick = (event) => {
-            if (handleDrawingPolylineClick(event)) return;
-            if (event.originalEvent) L.DomEvent.stopPropagation(event.originalEvent);
-          };
-          visibleLine.on('click', stopMapClick);
-          hitLine.on('click', stopMapClick);
-          casingLine.addTo(greenwaysLayerGroup);
-          visibleLine.addTo(greenwaysLayerGroup);
-          hitLine.addTo(greenwaysLayerGroup);
-          count += 1;
+      for (const network of analysis.networks) {
+        const casingLine = L.polyline(network.segments, {
+          pane: 'cyclingInfrastructurePane',
+          color: '#ffffff',
+          weight: 8,
+          opacity: 1,
+          interactive: false,
+          lineCap: 'round',
+          lineJoin: 'round'
         });
+        const visibleLine = L.polyline(network.segments, {
+          pane: 'cyclingInfrastructurePane',
+          color: '#059669',
+          weight: 5,
+          opacity: 1,
+          interactive: true,
+          lineCap: 'round',
+          lineJoin: 'round'
+        });
+        const hitLine = L.polyline(network.segments, {
+          pane: 'cyclingInfrastructurePane',
+          color: '#ffffff',
+          weight: 18,
+          opacity: 0.01,
+          interactive: true
+        });
+        const popup = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = network.name;
+        const details = document.createElement('div');
+        details.textContent = `≈ ${(network.distanceMeters / 1000).toFixed(2)} km de voies reliées · Réseau éventuellement ramifié · Revêtement : ${network.surface} · OpenStreetMap`;
+        popup.append(title, details);
+        const tooltip = document.createElement('span');
+        tooltip.textContent = network.name;
+        visibleLine.bindTooltip(tooltip, { sticky: true });
+        hitLine.bindTooltip(tooltip.cloneNode(true), { sticky: true });
+        visibleLine.bindPopup(popup);
+        hitLine.bindPopup(popup);
+        const stopMapClick = (event) => {
+          if (handleDrawingPolylineClick(event)) return;
+          if (event.originalEvent) L.DomEvent.stopPropagation(event.originalEvent);
+        };
+        visibleLine.on('click', stopMapClick);
+        hitLine.on('click', stopMapClick);
+        casingLine.addTo(greenwaysLayerGroup);
+        visibleLine.addTo(greenwaysLayerGroup);
+        hitLine.addTo(greenwaysLayerGroup);
       }
 
       rebuildGreenwaySnapIndex();
       greenwaysLoaded = true;
-      state.greenwaysCount = count;
-      setStatus(count
-        ? `${count} ${count === 1 ? 'tracé cyclable affiché' : 'tracés cyclables affichés'}. Vert : voie cyclable, bleu : piste, violet : itinéraire.`
-        : 'Aucune voie verte détectée dans cette zone. Zoomez pour affiner la recherche.');
-      return count;
+      state.greenwaysCount = analysis.networks.length;
+      const incomplete = analysis.incompleteWays
+        ? ` ${analysis.incompleteWays} élément(s) incomplet(s) ignoré(s).`
+        : '';
+      const message = analysis.networks.length
+        ? `${analysis.networks.length} réseau(x) relié(s) d’au moins 3 km en vert (rayon ${radiusM / 1000} km). Les autres calques ne sont pas filtrés.`
+        : `Aucun réseau cyclable relié d’au moins 3 km identifié dans un rayon de ${radiusM / 1000} km.`;
+      setGreenwaysOverlayStatus(`${message}${coverageMessage}${incomplete}`);
+      return analysis.networks.length;
+    }
+
+    function setNearbySearchStatus(message) {
+      document.getElementById('nearby-search-status').textContent = message;
     }
 
     function searchNearbyCycleways() {
@@ -5489,6 +5703,7 @@ const VeloGeocoding = (() => {
       state.circuits = [];
       statusEl.textContent = 'Recherche...';
       listEl.textContent = 'Recherche des aménagements cyclables OpenStreetMap...';
+      setNearbySearchStatus(`Recherche des voies reliées dans un rayon de ${radiusKm} km...`);
 
       const center = L.latLng(lat, lng);
       L.circle(center, {
@@ -5501,14 +5716,20 @@ const VeloGeocoding = (() => {
       }).bindTooltip(`Zone de recherche : ${radiusKm} km`).addTo(searchAreaLayerGroup);
 
       const radiusM = Math.round(radiusKm * 1000);
-      const ql = `[out:json][timeout:8];(way(around:${radiusM},${lat},${lng})["highway"="cycleway"];way(around:${radiusM},${lat},${lng})["cycleway"];way(around:${radiusM},${lat},${lng})["cycleway:left"];way(around:${radiusM},${lat},${lng})["cycleway:right"];way(around:${radiusM},${lat},${lng})["cycleway:both"];way(around:${radiusM},${lat},${lng})["bicycle"~"^(yes|designated|permissive)$"];relation(around:${radiusM},${lat},${lng})["route"="bicycle"];);out tags geom;`;
-      const result = await queryOverpassWithStatus(ql, null, 2800, controller.signal);
+      const around = `around:${radiusM},${lat},${lng}`;
+      const ql = buildCyclingNetworkQuery(around);
+      const result = await queryOverpassWithStatus(ql, attempt => {
+        if (requestId === localCircuitRequestId) {
+          setNearbySearchStatus(`Recherche dans un rayon de ${radiusKm} km : serveur ${attempt}/${OVERPASS_ENDPOINTS.length}...`);
+        }
+      }, 24000, controller.signal);
       if (requestId !== localCircuitRequestId) return false;
       let elements = result.elements;
       let coverageMessage = '';
       if (!result.elements) {
         statusEl.textContent = 'Secours OSM...';
         listEl.textContent = `Overpass indisponible : ${result.error} Recherche locale OpenStreetMap en cours...`;
+        setNearbySearchStatus(`Overpass indisponible : ${result.error} Recherche de secours en cours...`);
         try {
           const fallback = await fetchNearbyCyclewaysFromOsm(lat, lng, radiusKm, controller.signal);
           if (requestId !== localCircuitRequestId) return false;
@@ -5526,59 +5747,28 @@ const VeloGeocoding = (() => {
             : (error instanceof Error ? error.message : 'Recherche OpenStreetMap impossible.');
           statusEl.textContent = 'Erreur';
           listEl.textContent = `Overpass indisponible : ${result.error} Secours OpenStreetMap indisponible : ${reason}`;
+          setNearbySearchStatus(listEl.textContent);
           setStatus(listEl.textContent);
           return null;
         }
       }
 
       const palette = ['#059669', '#2563eb', '#d97706', '#7c3aed', '#db2777'];
-      const grouped = new Map();
-
-      for (const el of elements) {
-        const tags = el.tags || {};
-        const kind = el.type === 'relation' && tags.route === 'bicycle'
-          ? 'Itinéraire cyclable'
-          : SurfaceAnalysis.cyclingFacilityKind(tags);
-        if (!kind) continue;
-        const geometries = el.type === 'way'
-          ? [el.geometry]
-          : (Array.isArray(el.members)
-            ? el.members.filter(member => member.type === 'way').map(member => member.geometry)
-            : []);
-        const segments = geometries
-          .filter(geometry => Array.isArray(geometry) && geometry.length >= 2 &&
-            geometry.every(point => point && Number.isFinite(point.lat) && Number.isFinite(point.lon) &&
-              Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180))
-          .map(geometry => geometry.map(point => [point.lat, point.lon]));
-        if (!segments.length) continue;
-        const distanceMeters = segments.reduce((sum, coords) => sum + SurfaceAnalysis.length(coords), 0);
-        if (distanceMeters <= 0) continue;
-        const named = String(tags.name || tags.ref || '').trim();
-        const name = named || `${kind} sans nom`;
-        const key = named ? `${el.type}|${kind}|${named.toLowerCase()}` : `${el.type}|${el.id}`;
-        const nearestMeters = segments.reduce((nearest, coords) => coords.reduce((best, point) =>
-          Math.min(best, haversineMeters([lat, lng], point)), nearest), Infinity);
-        const existing = grouped.get(key);
-        if (existing) {
-          existing.segments.push(...segments);
-          existing.distanceMeters += distanceMeters;
-          existing.nearestMeters = Math.min(existing.nearestMeters, nearestMeters);
-          if (existing.surface !== (tags.surface || 'Non renseigné')) existing.surface = 'Mixte ou non renseigné';
-        } else {
-          grouped.set(key, {
-            id: el.id, name, kind, named: Boolean(named), segments, distanceMeters, nearestMeters,
-            network: tags.network || 'OpenStreetMap', surface: tags.surface || 'Non renseigné',
-            tags
-          });
-        }
+      const analysis = SurfaceAnalysis.connectedCyclingNetworks(elements, MIN_CONNECTED_CYCLEWAY_METERS);
+      if (analysis.incompleteWays) {
+        coverageMessage += ` ${analysis.incompleteWays} élément(s) à géométrie ou nœuds incomplets ont été ignorés.`;
       }
 
       if (requestId !== localCircuitRequestId) return false;
-      const found = [...grouped.values()].sort((a, b) =>
+      const found = analysis.networks.map(network => ({
+        ...network,
+        nearestMeters: network.segments.reduce((nearest, coords) => coords.reduce((best, point) =>
+          Math.min(best, haversineMeters([lat, lng], point)), nearest), Infinity)
+      })).sort((a, b) =>
         Number(b.named) - Number(a.named) || a.nearestMeters - b.nearestMeters);
       found.forEach((item, index) => { item.color = palette[index % palette.length]; });
       state.circuits = found;
-      statusEl.textContent = `${found.length} résultat(s)${coverageMessage ? ' · zone partielle' : ''}`;
+      statusEl.textContent = `${found.length} réseau(x)${coverageMessage ? ' · données partielles' : ''}`;
       listEl.innerHTML = '';
       if (coverageMessage) {
         const notice = document.createElement('div');
@@ -5588,29 +5778,28 @@ const VeloGeocoding = (() => {
       }
       if (!found.length) {
         const empty = document.createElement('div');
-        empty.textContent = 'Aucun aménagement cyclable cartographié dans la zone analysée.';
+        empty.textContent = 'Aucun réseau de pistes et voies cyclables reliées d’au moins 3 km identifié dans la zone analysée.';
         listEl.appendChild(empty);
-        setStatus(coverageMessage || `Aucun aménagement cyclable trouvé dans un rayon de ${radiusKm} km.`);
+        const message = `${empty.textContent}${coverageMessage ? ` ${coverageMessage}` : ''}`;
+        setNearbySearchStatus(message);
+        setStatus(message);
         return true;
       }
 
       found.forEach((c) => {
-        const lines = c.segments.map(segment =>
-          L.polyline(segment, { color: c.color, weight: 4, opacity: 0.9, interactive: true }).addTo(circuitsLayerGroup)
-        );
-        lines.forEach(line => {
-          const popup = document.createElement('div');
-          const title = document.createElement('strong');
-          title.textContent = c.name;
-          const details = document.createElement('div');
-          details.textContent = `${c.kind} · ≈ ${(c.distanceMeters / 1000).toFixed(2)} km de tronçons OSM · ${c.surface}`;
-          popup.append(title, details);
-          line.bindPopup(popup);
-          line.on('click', (event) => {
-            if (event.latlng) streetViewTarget = event.latlng;
-            if (handleDrawingPolylineClick(event)) return;
-            if (event.originalEvent) L.DomEvent.stopPropagation(event.originalEvent);
-          });
+        const line = L.polyline(c.segments, { color: c.color, weight: 4, opacity: 0.9, interactive: true })
+          .addTo(circuitsLayerGroup);
+        const popup = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = c.name;
+        const details = document.createElement('div');
+        details.textContent = `${c.kind} · ≈ ${(c.distanceMeters / 1000).toFixed(2)} km de tronçons OSM · ${c.surface}`;
+        popup.append(title, details);
+        line.bindPopup(popup);
+        line.on('click', (event) => {
+          if (event.latlng) streetViewTarget = event.latlng;
+          if (handleDrawingPolylineClick(event)) return;
+          if (event.originalEvent) L.DomEvent.stopPropagation(event.originalEvent);
         });
 
         const row = document.createElement('div');
@@ -5622,15 +5811,14 @@ const VeloGeocoding = (() => {
         detail.textContent = `${c.kind} · ≈ ${(c.distanceMeters / 1000).toFixed(2)} km de tronçons OSM`;
         row.append(heading, detail);
         row.addEventListener('click', () => {
-          const routeLayer = L.featureGroup(lines);
-          map.fitBounds(routeLayer.getBounds(), { maxZoom: 16 });
-          lines[0].openPopup();
+          map.fitBounds(line.getBounds(), { maxZoom: 16 });
+          line.openPopup();
         });
         listEl.appendChild(row);
       });
-      setStatus(coverageMessage
-        ? `${found.length} résultat(s). ${coverageMessage}`
-        : `${found.length} aménagement(s) cyclable(s) OpenStreetMap trouvés dans un rayon de ${radiusKm} km. Les pistes sans étiquette vélo ne peuvent pas être détectées.`);
+      const message = `${found.length} réseau(x) de pistes et voies cyclables reliées d’au moins 3 km identifié(s).${coverageMessage ? ` ${coverageMessage}` : ''}`;
+      setNearbySearchStatus(message);
+      setStatus(message);
       return true;
     }
 
@@ -5655,7 +5843,7 @@ const VeloGeocoding = (() => {
         const routeNames = markedRoute.routes.slice(0, 3).map(route =>
           route.ref ? `${route.ref} — ${route.name || 'Véloroute'}` : (route.name || 'Véloroute')
         );
-        routeGuidanceMessage = `L’option 1 privilégie les véloroutes balisées ${routeNames.join(' → ') || 'du réseau local'} lorsque disponibles.`;
+        routeGuidanceMessage = `Recherche de variantes suivant les véloroutes balisées ${routeNames.join(' → ') || 'du réseau local'} ; priorité aux aménagements cyclables identifiés.`;
       } else if (!routeGuidanceMessage) {
         routeGuidanceMessage = 'Aucune véloroute balisée continue trouvée près des étapes ; le trajet utilise le profil vélo.';
       }
@@ -5681,7 +5869,7 @@ const VeloGeocoding = (() => {
         return;
       }
       if (markedRoute && !alternatives[0].markedRoute) {
-        routeGuidanceMessage = 'Guidage par les véloroutes balisées indisponible ; les options utilisent le profil vélo.';
+        routeGuidanceMessage = 'L’option 1 privilégie un trajet hors du couloir balisé ; les autres variantes disponibles peuvent suivre les véloroutes.';
       } else if (markedRoute && alternatives.some(route => !route.markedRoute)) {
         routeGuidanceMessage += ' Les autres options recherchent aussi des voies cyclables hors de ce couloir.';
       }
@@ -5711,7 +5899,7 @@ const VeloGeocoding = (() => {
       });
     }
 
-    function buildLoopWaypoints(start, targetKm, dirKey) {
+    function buildLoopWaypoints(start, targetKm, dirKey, stops = []) {
       const dirCfg = LOOP_DIRECTIONS[dirKey] || LOOP_DIRECTIONS.N;
       const baseBearing = dirCfg.bearing;
       const spread = dirCfg.delta;
@@ -5723,7 +5911,24 @@ const VeloGeocoding = (() => {
       const p1 = offsetLatLng(start.lat, start.lng, radiusKm * 0.85, b1);
       const p2 = offsetLatLng(start.lat, start.lng, radiusKm * 1.15, b2);
       const p3 = offsetLatLng(start.lat, start.lng, radiusKm * 0.85, b3);
-      return [[start.lat, start.lng], p1, p2, p3, [start.lat, start.lng]];
+      const anchors = [[start.lat, start.lng], p1, p2, p3, [start.lat, start.lng]];
+      if (!stops.length) return anchors;
+      const points = anchors.map(([lat, lng]) => ({ lat, lng }));
+      const metrics = buildPoiRouteMetrics(points);
+      const result = [anchors[0]];
+      let anchorIndex = 1;
+      let previousPosition = 0;
+      for (const stop of stops) {
+        const position = findPoiRoutePosition(stop.lat, stop.lng, points, metrics.cumulativeMeters);
+        const along = Math.max(previousPosition, position.alongMeters);
+        while (anchorIndex < anchors.length - 1 && metrics.cumulativeMeters[anchorIndex] < along) {
+          result.push(anchors[anchorIndex++]);
+        }
+        result.push([stop.lat, stop.lng]);
+        previousPosition = along;
+      }
+      result.push(...anchors.slice(anchorIndex));
+      return result;
     }
 
     async function computeLoopFromA() {
@@ -5740,6 +5945,8 @@ const VeloGeocoding = (() => {
       setRouteDownloadProgress(15, true);
       const requestId = routeAlternativesRequestId;
       const start = state.waypoints[0];
+      const stops = state.waypoints.slice(1).map(point => ({ lat: point.lat, lng: point.lng }));
+      const requiredStops = stops.map(point => [point.lat, point.lng]);
       const direction = state.loopDirection;
       const targetKm = state.loopKm;
       const dirCfg = LOOP_DIRECTIONS[direction] || LOOP_DIRECTIONS.N;
@@ -5750,7 +5957,7 @@ const VeloGeocoding = (() => {
       }[state.practice] || 'VTC / Balade';
 
       let routingTargetKm = targetKm;
-      const loopCoords = buildLoopWaypoints(start, routingTargetKm, direction);
+      const loopCoords = buildLoopWaypoints(start, routingTargetKm, direction, stops);
       // Aperçu immédiat de la zone de boucle sur la carte pendant le calcul
       L.polyline(loopCoords, {
         color: '#059669',
@@ -5770,13 +5977,13 @@ const VeloGeocoding = (() => {
       const updateProgress = percent => {
         if (requestId === routeAlternativesRequestId) setRouteDownloadProgress(percent, true);
       };
-      let alternatives = await fetchOsrmRouteAlternatives(loopCoords, updateProgress, true);
+      let alternatives = await fetchOsrmRouteAlternatives(loopCoords, updateProgress, true, requiredStops);
 
       // Repli avec un rayon légèrement resserré si le routage sur le premier cercle échoue
       if (!alternatives.length && requestId === routeAlternativesRequestId) {
         routingTargetKm = Math.max(10, targetKm * 0.72);
-        const tighterCoords = buildLoopWaypoints(start, routingTargetKm, direction);
-        alternatives = await fetchOsrmRouteAlternatives(tighterCoords, updateProgress, true);
+        const tighterCoords = buildLoopWaypoints(start, routingTargetKm, direction, stops);
+        alternatives = await fetchOsrmRouteAlternatives(tighterCoords, updateProgress, true, requiredStops);
       }
 
       if (requestId !== routeAlternativesRequestId) return;
@@ -5796,10 +6003,10 @@ const VeloGeocoding = (() => {
       let adjustmentUnavailable = false;
       if (initialDistance > 0 && Math.abs(initialDistance - targetMeters) > targetMeters * 0.15) {
         const scale = Math.max(0.6, Math.min(1.8, targetMeters / initialDistance));
-        const adjustedCoords = buildLoopWaypoints(start, routingTargetKm * scale, direction);
+        const adjustedCoords = buildLoopWaypoints(start, routingTargetKm * scale, direction, stops);
         setStatus(`Ajustement de la boucle vers ${targetKm} km...`);
         setRouteDownloadProgress(40, true);
-        const adjusted = await fetchOsrmRouteAlternatives(adjustedCoords, updateProgress, true);
+        const adjusted = await fetchOsrmRouteAlternatives(adjustedCoords, updateProgress, true, requiredStops);
         if (requestId !== routeAlternativesRequestId) return;
         if (adjusted.length) {
           const adjustedDistance = routeDistance(adjusted[0]);
@@ -5831,7 +6038,6 @@ const VeloGeocoding = (() => {
         clearRouteAlternatives();
         routeLayerGroup.clearLayers();
       editableRouteHandlesGroup.clearLayers();
-        circuitsLayerGroup.clearLayers();
         if (state.planMode === 'loop') {
           await computeLoopFromA();
         }
@@ -5929,68 +6135,105 @@ const VeloGeocoding = (() => {
     };
 
     let poiRequestId = 0;
+    let poiRequestController = null;
+
+    function cancelPoiRequest() {
+      poiRequestId++;
+      if (poiRequestController) poiRequestController.abort();
+      poiRequestController = null;
+    }
+
+    function setActivePoiCategory(catKey) {
+      state.activePoiCategory = catKey;
+      document.querySelectorAll('.poi-btn').forEach(button => {
+        const selected = button.getAttribute('data-poi') === catKey;
+        button.setAttribute('aria-pressed', String(selected));
+        button.classList.toggle('btn-accent', selected);
+        button.classList.toggle('btn-outline', !selected);
+      });
+    }
+
+    function poiStageInsertionIndex(points, service, preserveLast) {
+      const end = preserveLast && points.length >= 2 ? points.length - 1 : points.length;
+      const routePoints = state.activeRouteCoords;
+      if (routePoints.length < 2 || end <= 1) return end;
+      const metrics = buildPoiRouteMetrics(routePoints);
+      const position = findPoiRoutePosition(service.lat, service.lng, routePoints, metrics.cumulativeMeters);
+      for (let index = 1; index < end; index++) {
+        const existing = findPoiRoutePosition(points[index].lat, points[index].lng, routePoints, metrics.cumulativeMeters);
+        if (existing && position && existing.alongMeters > position.alongMeters) return index;
+      }
+      return end;
+    }
+
     async function loadPoiCategory(catKey) {
       const cfg = POI_FILTERS[catKey];
-      if (!cfg) return;
-      const requestId = ++poiRequestId;
-      state.activePoiCategory = catKey;
-      const mapCenter = map.getCenter();
+      if (!cfg) {
+        document.getElementById('poi-status').textContent = 'Catégorie de services inconnue.';
+        return;
+      }
+      cancelPoiRequest();
+      const requestId = poiRequestId;
+      const controller = new AbortController();
+      poiRequestController = controller;
+      setActivePoiCategory(catKey);
+      const mapCenter = map.wrapLatLng(map.getCenter());
       const routePoints = state.activeRouteCoords.length >= 2
         ? state.activeRouteCoords
         : [];
       const routeMetrics = routePoints.length ? buildPoiRouteMetrics(routePoints) : null;
-      let center;
-      if (routePoints.length) {
-        const nearest = routePoints.reduce((best, point) => {
-          const distance = haversineMeters(
-            [mapCenter.lat, mapCenter.lng],
-            [point.lat, point.lng]
-          );
-          return !best || distance < best.distance ? { point, distance } : best;
-        }, null);
-        center = [nearest.point.lat, nearest.point.lng];
-      } else if (state.waypoints.length) {
-        center = [state.waypoints[0].lat, state.waypoints[0].lng];
-      } else {
-        center = [mapCenter.lat, mapCenter.lng];
-      }
       const radiusM = Math.round(state.radiusKm * 1000);
       const around = routeMetrics
         ? `around:${POI_ROUTE_BUFFER_METERS},${routeMetrics.searchPoints.map(point => `${point.lat},${point.lng}`).join(',')}`
-        : `around:${radiusM},${center[0]},${center[1]}`;
+        : `around:${radiusM},${mapCenter.lat},${mapCenter.lng}`;
       const maxResults = routeMetrics ? POI_ROUTE_MAX_RESULTS : 25;
       poiLayerGroup.clearLayers();
       const listEl = document.getElementById('poi-list');
-      listEl.textContent = routeMetrics
-        ? `Recherche : ${cfg.label} à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours...`
-        : `Recherche : ${cfg.label} dans un rayon de ${state.radiusKm} km...`;
+      const statusEl = document.getElementById('poi-status');
+      listEl.replaceChildren();
+      const scope = routeMetrics
+        ? `à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours`
+        : `dans un rayon de ${state.radiusKm} km autour du centre de la carte`;
+      statusEl.textContent = `Recherche : ${cfg.label} ${scope}...`;
       const result = await queryOverpassWithStatus(
         `[out:json][timeout:12];(${cfg.query(around)});out center ${maxResults};`,
         attempt => {
-          if (requestId === poiRequestId && attempt > 1) {
-            listEl.textContent = `Serveur Overpass lent, nouvelle tentative ${attempt}/${OVERPASS_ENDPOINTS.length}...`;
+          if (requestId === poiRequestId) {
+            statusEl.textContent = `Recherche : ${cfg.label} ${scope} (serveur ${attempt}/${OVERPASS_ENDPOINTS.length})...`;
           }
         },
-        14000
+        14000, controller.signal
       );
       if (requestId !== poiRequestId) return;
-      listEl.innerHTML = '';
+      poiRequestController = null;
       if (result.error) {
-        listEl.textContent = `Recherche indisponible : ${result.error}`;
+        statusEl.textContent = `Recherche indisponible : ${result.error}`;
         return;
       }
-      const elems = result.elements || [];
+      if (!Array.isArray(result.elements)) {
+        statusEl.textContent = 'Réponse de recherche de services invalide.';
+        return;
+      }
+      const elems = result.elements;
       if (!elems.length) {
-        listEl.textContent = routeMetrics
+        statusEl.textContent = routeMetrics
           ? `Aucun résultat « ${cfg.label} » à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours.`
-          : `Aucun résultat « ${cfg.label} » dans un rayon de ${state.radiusKm} km autour de la carte.`;
+          : `Aucun résultat « ${cfg.label} » dans un rayon de ${state.radiusKm} km autour du centre de la carte.`;
         return;
       }
       const poiResults = [];
+      let invalidLocations = 0;
       elems.forEach(el => {
+        if (!el || typeof el !== 'object') {
+          invalidLocations++;
+          return;
+        }
         const lat = typeof el.lat === 'number' ? el.lat : (el.center && el.center.lat);
         const lng = typeof el.lon === 'number' ? el.lon : (el.center && el.center.lon);
-        if (typeof lat !== 'number' || typeof lng !== 'number') return;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+          invalidLocations++;
+          return;
+        }
         const routePosition = routeMetrics
           ? findPoiRoutePosition(lat, lng, routePoints, routeMetrics.cumulativeMeters)
           : null;
@@ -6001,10 +6244,15 @@ const VeloGeocoding = (() => {
         poiResults.sort((a, b) => a.routePosition.alongMeters - b.routePosition.alongMeters);
       }
       const visibleResults = poiResults.slice(0, routeMetrics ? POI_ROUTE_MAX_RESULTS : 20);
+      const limitMessage = elems.length >= maxResults || poiResults.length > visibleResults.length
+        ? ' Liste limitée : d’autres lieux peuvent exister.'
+        : '';
+      const invalidMessage = invalidLocations ? ` ${invalidLocations} lieu(x) sans coordonnées valides ignoré(s).` : '';
       if (!visibleResults.length) {
-        listEl.textContent = routeMetrics
-          ? `Aucun résultat « ${cfg.label} » à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours.`
+        const message = routeMetrics
+          ? `Aucun résultat « ${cfg.label} » à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours parmi les lieux reçus.`
           : `Aucun résultat cartographiable « ${cfg.label} » dans ce rayon.`;
+        statusEl.textContent = `${message}${limitMessage}${invalidMessage}`;
         return;
       }
       const poiLocations = [];
@@ -6028,7 +6276,11 @@ const VeloGeocoding = (() => {
         popupCategory.style.cssText = 'font-size:11px;color:#475569;';
         popup.append(popupName, popupCategory);
         marker.bindPopup(popup);
-        if (routeDetail) marker.bindTooltip(`${name} · ${routeDetail}`);
+        if (routeDetail) {
+          const tooltip = document.createElement('span');
+          tooltip.textContent = `${name} · ${routeDetail}`;
+          marker.bindTooltip(tooltip);
+        }
         poiLocations.push([lat, lng]);
 
         const item = document.createElement('div');
@@ -6036,9 +6288,15 @@ const VeloGeocoding = (() => {
         item.style.cssText = 'background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;gap:8px;';
         const itemInfo = document.createElement('div');
         itemInfo.style.cssText = 'display:flex;flex-direction:column;min-width:0;gap:2px;';
-        const itemName = document.createElement('strong');
+        const itemName = document.createElement('button');
+        itemName.type = 'button';
         itemName.textContent = name;
-        itemName.style.cssText = 'font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        itemName.setAttribute('aria-label', `Afficher ${name} sur la carte`);
+        itemName.style.cssText = 'border:0;background:none;padding:0;text-align:left;color:#0369a1;cursor:pointer;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        itemName.addEventListener('click', () => {
+          map.setView([lat, lng], Math.max(map.getZoom(), 14), { animate: false });
+          marker.openPopup();
+        });
         itemInfo.appendChild(itemName);
         if (routeDetail) {
           const itemRouteDetail = document.createElement('span');
@@ -6053,18 +6311,34 @@ const VeloGeocoding = (() => {
         addButton.textContent = '+ Étape';
         item.append(itemInfo, addButton);
         addButton.addEventListener('click', () => {
-          state.waypoints.push({ lat, lng, name });
-          renderWaypoints();
-          recomputeCurrentMode();
+          if (state.planMode === 'explore') {
+            statusEl.textContent = 'Choisissez A → B → C, Tracer à vélo ou Boucle auto pour ajouter une étape.';
+            return;
+          }
+          if (state.planMode === 'abc' && state.activeRouteCoords.length >= 2 && state.waypoints.length < 2) {
+            statusEl.textContent = 'Définissez un départ et une arrivée pour recalculer ce parcours avec une étape.';
+            return;
+          }
+          pushHistorySnapshot();
+          const service = { lat, lng, name };
+          if (state.planMode === 'draw') {
+            const index = poiStageInsertionIndex(state.customDrawPoints, service, true);
+            state.customDrawPoints.splice(index, 0, { lat, lng, snapped: false });
+            updateCustomDrawnRoute();
+          } else {
+            const index = poiStageInsertionIndex(state.waypoints, service, state.planMode === 'abc');
+            state.waypoints.splice(index, 0, service);
+            renderWaypoints();
+            recomputeCurrentMode();
+          }
+          statusEl.textContent = 'Étape ajoutée au parcours.';
         });
         listEl.appendChild(item);
       });
-      const summary = document.createElement('div');
-      summary.style.color = '#64748b';
-      summary.textContent = routeMetrics
-        ? `${poiLocations.length}${elems.length >= POI_ROUTE_MAX_RESULTS ? '+' : ''} résultat(s) à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours, triés depuis le départ.`
-        : `${poiLocations.length} résultat(s) — rayon ${state.radiusKm} km`;
-      listEl.insertBefore(summary, listEl.firstChild);
+      const summary = routeMetrics
+        ? `${poiLocations.length} résultat(s) à moins de ${POI_ROUTE_BUFFER_METERS} m du parcours, triés depuis le départ.`
+        : `${poiLocations.length} résultat(s) — rayon ${state.radiusKm} km autour du centre de la carte.`;
+      statusEl.textContent = `${summary}${limitMessage}${invalidMessage}`;
       if (!routeMetrics) {
         const bounds = L.latLngBounds(poiLocations);
         if (poiLocations.length === 1) {
@@ -6129,7 +6403,7 @@ const VeloGeocoding = (() => {
       if (greenwayCount > 0) {
         const greenRow = document.createElement('div');
         greenRow.className = 'route-card';
-        greenRow.innerHTML = `<strong>Voies vertes &amp; pistes détectées</strong><div class="muted-xs">${greenwayCount} tracé(s) visible(s) autour de ${escapeHtml(name)}</div>`;
+        greenRow.innerHTML = `<strong>Voies vertes &amp; pistes détectées</strong><div class="muted-xs">${greenwayCount} réseau(x) relié(s) d’au moins 3 km autour de ${escapeHtml(name)}</div>`;
         greenRow.addEventListener('click', () => {
           map.setZoom(Math.max(map.getZoom(), 14));
         });
@@ -6172,14 +6446,15 @@ const VeloGeocoding = (() => {
       const activationId = ++placeActivationRequestId;
       cancelLocalCircuitSearch();
       state.placeSearchActive = true;
+      cancelGreenwaysRequest();
       map.setView([lat, lng], 12);
       if (!state.greenwaysEnabled) {
         state.greenwaysEnabled = true;
         const toggleGreenwaysBtn = document.getElementById('toggle-greenways');
         toggleGreenwaysBtn.textContent = '✓ Voies vertes & pistes';
+        toggleGreenwaysBtn.setAttribute('aria-pressed', 'true');
         toggleGreenwaysBtn.classList.remove('btn-outline');
         toggleGreenwaysBtn.classList.add('btn-accent');
-        cyclosmGreenwaysOverlay.addTo(map);
       }
       if (!map.hasLayer(waymarkedCyclingOverlay)) waymarkedCyclingOverlay.addTo(map);
       state.waymarkedEnabled = true;
@@ -6348,12 +6623,26 @@ const VeloGeocoding = (() => {
       return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     }
 
+    function getWeatherDepartureValue() {
+      const date = document.getElementById('weather-departure-date').value;
+      const time = document.getElementById('weather-departure-time').value.trim();
+      if (!date && !time) return '';
+      if (!date || !/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(time)) return null;
+      return `${date}T${time}`;
+    }
+
+    function setWeatherDepartureValue(value) {
+      const [date = '', time = ''] = value.split('T');
+      document.getElementById('weather-departure-date').value = date;
+      document.getElementById('weather-departure-time').value = time;
+    }
+
     function initializeWeatherDepartureInput() {
-      const input = document.getElementById('weather-departure');
+      const input = document.getElementById('weather-departure-date');
       const now = new Date();
-      input.min = toLocalDateTimeInputValue(now);
-      input.max = toLocalDateTimeInputValue(new Date(now.getTime() + 15 * 24 * 3600000));
-      input.value = toLocalDateTimeInputValue(now);
+      input.min = toLocalDateTimeInputValue(now).slice(0, 10);
+      input.max = toLocalDateTimeInputValue(new Date(now.getTime() + 15 * 24 * 3600000)).slice(0, 10);
+      setWeatherDepartureValue(toLocalDateTimeInputValue(now));
     }
 
     // =========================================================================
@@ -6393,6 +6682,9 @@ const VeloGeocoding = (() => {
     // Recherche directe d'une véloroute (V52, EV6, etc.)
     const mobilePanelOpenBtn = document.getElementById('btn-mobile-panel-open');
     const mobilePanelCloseBtn = document.getElementById('btn-mobile-panel-close');
+    const mobileMapLogo = document.querySelector('.app-logo').cloneNode();
+    mobileMapLogo.className = 'mobile-map-logo';
+    document.getElementById('map-container').appendChild(mobileMapLogo);
     const closeMobilePanel = () => {
       document.body.classList.remove('mobile-sidebar-open');
       mobilePanelOpenBtn.setAttribute('aria-expanded', 'false');
@@ -6474,24 +6766,28 @@ const VeloGeocoding = (() => {
       state.greenwaysEnabled = !state.greenwaysEnabled;
       if (state.greenwaysEnabled) {
         toggleGreenwaysBtn.textContent = '✓ Voies vertes & pistes';
+        toggleGreenwaysBtn.setAttribute('aria-pressed', 'true');
         toggleGreenwaysBtn.classList.remove('btn-outline');
         toggleGreenwaysBtn.classList.add('btn-accent');
-        cyclosmGreenwaysOverlay.addTo(map);
-        setStatus('Calque CyclOSM des voies vertes actif. Chargement des aménagements détaillés...');
-        if (map.getZoom() < 9) {
-          map.setView(map.getCenter(), 9);
+        setGreenwaysOverlayStatus('Recherche des réseaux cyclables reliés d’au moins 3 km...');
+        if (map.getZoom() < 12) {
+          map.setView(map.getCenter(), 12, { animate: false });
         } else {
           loadVisibleGreenways();
         }
       } else {
-        greenwaysRequestId += 1;
+        cancelGreenwaysRequest();
         greenwaysLayerGroup.clearLayers();
         greenwaysSnapSegments = [];
         projectedGreenwaysSnapSegments = [];
-        map.removeLayer(cyclosmGreenwaysOverlay);
+        greenwaysLoaded = false;
+        greenwaysLoadFailed = false;
+        state.greenwaysCount = 0;
         toggleGreenwaysBtn.textContent = 'Voies vertes & pistes';
+        toggleGreenwaysBtn.setAttribute('aria-pressed', 'false');
         toggleGreenwaysBtn.classList.remove('btn-accent');
         toggleGreenwaysBtn.classList.add('btn-outline');
+        setGreenwaysOverlayStatus('');
         setStatus('Calque des voies vertes masqué.');
       }
     });
@@ -6501,7 +6797,6 @@ const VeloGeocoding = (() => {
       btn.addEventListener('click', () => {
         const key = btn.getAttribute('data-layer');
         if (!layers[key]) return;
-        map.removeLayer(cyclosmGreenwaysOverlay);
         Object.keys(layers).forEach(k => {
           if (k !== key && map.hasLayer(layers[k])) map.removeLayer(layers[k]);
         });
@@ -6544,9 +6839,9 @@ const VeloGeocoding = (() => {
           state.greenwaysEnabled = true;
           const toggleGreenwaysBtn = document.getElementById('toggle-greenways');
           toggleGreenwaysBtn.textContent = '✓ Voies vertes & pistes';
+          toggleGreenwaysBtn.setAttribute('aria-pressed', 'true');
           toggleGreenwaysBtn.classList.remove('btn-outline');
           toggleGreenwaysBtn.classList.add('btn-accent');
-          cyclosmGreenwaysOverlay.addTo(map);
         }
         if (map.getZoom() < 14) {
           map.setZoom(14, { animate: false });
@@ -6645,11 +6940,14 @@ const VeloGeocoding = (() => {
     document.getElementById('btn-my-location').addEventListener('click', (e) => {
       const button = e.currentTarget;
       if (!navigator.geolocation) {
-        setStatus('La géolocalisation n’est pas disponible dans ce navigateur.');
+        const message = 'La géolocalisation n’est pas disponible dans ce navigateur.';
+        setNearbySearchStatus(message);
+        setStatus(message);
         return;
       }
 
       button.disabled = true;
+      setNearbySearchStatus('Localisation en cours...');
       setStatus('Localisation en cours...');
       navigator.geolocation.getCurrentPosition((position) => {
         button.disabled = false;
@@ -6663,7 +6961,9 @@ const VeloGeocoding = (() => {
           2: 'Votre position est momentanément indisponible.',
           3: 'La localisation a expiré. Réessayez.'
         };
-        setStatus(messages[error.code] || 'Impossible d’obtenir votre position.');
+        const message = messages[error.code] || 'Impossible d’obtenir votre position.';
+        setNearbySearchStatus(message);
+        setStatus(message);
       }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
     });
 
@@ -6695,10 +6995,11 @@ const VeloGeocoding = (() => {
       btn.addEventListener('click', () => loadPoiCategory(btn.getAttribute('data-poi')));
     });
     document.getElementById('btn-clear-pois').addEventListener('click', () => {
-      poiRequestId++;
-      state.activePoiCategory = null;
+      cancelPoiRequest();
+      setActivePoiCategory(null);
       poiLayerGroup.clearLayers();
-      document.getElementById('poi-list').innerHTML = '';
+      document.getElementById('poi-list').replaceChildren();
+      document.getElementById('poi-status').textContent = 'Sélectionnez une catégorie pour rechercher des services.';
     });
 
     document.getElementById('btn-search').addEventListener('click', () => searchPlaces(document.getElementById('search-input').value));
@@ -6748,8 +7049,10 @@ const VeloGeocoding = (() => {
     });
 
     initializeWeatherDepartureInput();
-    document.getElementById('weather-departure').addEventListener('change', () => {
-      if (state.activeRouteData) refreshRouteWeather(state.activeRouteData);
+    ['weather-departure-date', 'weather-departure-time'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => {
+        refreshRouteWeather(state.activeRouteData);
+      });
     });
 
     document.querySelectorAll('.quick-place').forEach(btn => {
@@ -6812,6 +7115,8 @@ const VeloGeocoding = (() => {
       const center = map.wrapLatLng(map.getCenter());
       const selection = state.activeMapSelection;
       const meta = selection && selection.meta;
+      const weatherDeparture = getWeatherDepartureValue();
+      if (weatherDeparture === null) throw new Error('Date ou heure météo invalide : utilisez le format 24 h HH:MM.');
       return {
         format: VeloProject.FORMAT,
         version: VeloProject.VERSION,
@@ -6822,7 +7127,7 @@ const VeloGeocoding = (() => {
           loopKm: state.loopKm,
           loopDirection: state.loopDirection,
           averageSpeedKmh: getAverageSpeedKmh(),
-          weatherDeparture: document.getElementById('weather-departure').value,
+          weatherDeparture,
           baseLayer: activeLayer ? activeLayer.getAttribute('data-layer') : 'osm',
           waymarkedEnabled: state.waymarkedEnabled,
           greenwaysEnabled: state.greenwaysEnabled,
@@ -6914,8 +7219,8 @@ const VeloGeocoding = (() => {
       clickInspectionRequestId++;
       liveScanRequestId++;
       cancelLocalCircuitSearch();
-      greenwaysRequestId++;
-      poiRequestId++;
+      cancelGreenwaysRequest();
+      cancelPoiRequest();
       document.getElementById('btn-calculate-entered-route').disabled = false;
       state.historyStack = [];
       state.practice = project.settings.practice;
@@ -6926,7 +7231,7 @@ const VeloGeocoding = (() => {
       state.customDrawPoints = project.customDrawPoints;
       state.selectedRouteId = project.selectedRouteId;
       state.activeMapSelection = null;
-      state.activePoiCategory = null;
+      setActivePoiCategory(null);
       state.circuits = [];
       state.loadedRoutes = [];
       state.placeSearchActive = false;
@@ -6944,17 +7249,22 @@ const VeloGeocoding = (() => {
       clickedRouteMarkersGroup.clearLayers();
       greenwaysSnapSegments = [];
       projectedGreenwaysSnapSegments = [];
+      greenwaysLoaded = false;
+      greenwaysLoadFailed = false;
+      state.greenwaysCount = 0;
       map.closePopup();
       document.getElementById('track-detail-card').classList.add('hidden');
-      document.getElementById('poi-list').textContent = '';
+      document.getElementById('poi-list').replaceChildren();
+      document.getElementById('poi-status').textContent = 'Sélectionnez une catégorie pour rechercher des services.';
       document.getElementById('circuits-list').textContent = 'Relancez la recherche pour afficher les aménagements cyclables.';
       document.getElementById('circuits-status').textContent = 'Prêt';
+      setNearbySearchStatus('En attente de recherche.');
       document.getElementById('route-start-input').value = project.form.start;
       document.getElementById('route-end-input').value = project.form.end;
       document.getElementById('route-via-fields').replaceChildren();
       project.form.via.forEach(value => { addRouteStageField(false).value = value; });
       document.getElementById('average-speed-select').value = String(project.settings.averageSpeedKmh);
-      document.getElementById('weather-departure').value = project.settings.weatherDeparture;
+      setWeatherDepartureValue(project.settings.weatherDeparture);
       document.getElementById('radius-slider').value = String(state.radiusKm);
       document.getElementById('radius-label').textContent = `${state.radiusKm} km`;
       document.getElementById('loop-km-slider').value = String(state.loopKm);
@@ -6975,10 +7285,11 @@ const VeloGeocoding = (() => {
       Object.keys(layers).forEach(key => {
         if (map.hasLayer(layers[key])) map.removeLayer(layers[key]);
       });
-      layers[project.settings.baseLayer].addTo(map);
-      if (typeof layers[project.settings.baseLayer].bringToBack === 'function') layers[project.settings.baseLayer].bringToBack();
+      const baseLayer = project.settings.baseLayer === 'voyager' ? 'osm' : project.settings.baseLayer;
+      layers[baseLayer].addTo(map);
+      if (typeof layers[baseLayer].bringToBack === 'function') layers[baseLayer].bringToBack();
       document.querySelectorAll('.layer-btn').forEach(button => {
-        button.classList.toggle('active', button.getAttribute('data-layer') === project.settings.baseLayer);
+        button.classList.toggle('active', button.getAttribute('data-layer') === baseLayer);
       });
       if (state.waymarkedEnabled) {
         if (!map.hasLayer(waymarkedCyclingOverlay)) waymarkedCyclingOverlay.addTo(map);
@@ -6988,15 +7299,16 @@ const VeloGeocoding = (() => {
       toggleWaymarkedBtn.textContent = state.waymarkedEnabled ? '✓ Réseau Véloroutes Europe' : 'Afficher Réseau Véloroutes';
       toggleWaymarkedBtn.classList.toggle('btn-purple', state.waymarkedEnabled);
       toggleWaymarkedBtn.classList.toggle('btn-outline', !state.waymarkedEnabled);
-      if (state.greenwaysEnabled) {
-        if (!map.hasLayer(cyclosmGreenwaysOverlay)) cyclosmGreenwaysOverlay.addTo(map);
-      } else {
-        map.removeLayer(cyclosmGreenwaysOverlay);
-      }
       toggleGreenwaysBtn.textContent = state.greenwaysEnabled ? '✓ Voies vertes & pistes' : 'Voies vertes & pistes';
+      toggleGreenwaysBtn.setAttribute('aria-pressed', String(state.greenwaysEnabled));
       toggleGreenwaysBtn.classList.toggle('btn-accent', state.greenwaysEnabled);
       toggleGreenwaysBtn.classList.toggle('btn-outline', !state.greenwaysEnabled);
+      setGreenwaysOverlayStatus(state.greenwaysEnabled ? 'Recherche des réseaux cyclables reliés d’au moins 3 km...' : '');
       map.setView([project.settings.map.lat, project.settings.map.lng], project.settings.map.zoom, { animate: false });
+      if (state.greenwaysEnabled) {
+        cancelGreenwaysRequest();
+        greenwaysSearchTimer = setTimeout(loadVisibleGreenways, 150);
+      }
       if (state.planMode === 'draw') renderCustomDrawPoints();
       else renderWaypoints();
       renderVisibleVeloroutesSidebar();
@@ -7033,7 +7345,7 @@ const VeloGeocoding = (() => {
       } else {
         updateStatsUI(active);
       }
-      setProjectStatus('Projet ouvert : géométrie et paramètres restaurés sans recalcul du parcours.');
+      setProjectStatus(`Projet ouvert : géométrie et paramètres restaurés sans recalcul du parcours.${project.settings.baseLayer === 'voyager' ? ' Carte Claire a été remplacée par la carte routière.' : ''}`);
     }
 
     document.getElementById('btn-save-project').addEventListener('click', downloadProject);
@@ -7095,7 +7407,7 @@ ${trkpts}
       if (state.placeSearchActive) return;
       liveScanTimer = setTimeout(scanVeloroutesInCurrentViewport, 400);
       if (state.greenwaysEnabled) {
-        if (greenwaysSearchTimer) clearTimeout(greenwaysSearchTimer);
+        cancelGreenwaysRequest();
         greenwaysSearchTimer = setTimeout(loadVisibleGreenways, 700);
       }
     });
