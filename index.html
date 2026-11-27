@@ -1220,6 +1220,8 @@ const SurfaceAnalysis = (() => {
     if (['no', 'private', 'dismount', 'use_sidepath'].includes(bicycle) ||
         (['no', 'private', 'customers', 'delivery', 'destination'].includes(access) && !allowed)) return null;
     if (highway === 'cycleway') return 'Piste cyclable';
+    if (String(tags.cyclestreet || '').toLowerCase() === 'yes' ||
+        String(tags.bicycle_road || '').toLowerCase() === 'yes') return 'Rue cyclable';
     const path = ['path', 'footway', 'pedestrian', 'track'].includes(highway);
     if (path && bicycle === 'designated') return 'Voie cyclable';
     const facilities = ['cycleway', 'cycleway:left', 'cycleway:right', 'cycleway:both']
@@ -1269,6 +1271,8 @@ const SurfaceAnalysis = (() => {
     return { elements: ways, incomplete };
   }
 
+  const CYCLING_NETWORK_BRIDGE_METERS = 60;
+
   function connectedCyclingNetworks(elements, minimumMeters) {
     if (!Array.isArray(elements) || !Number.isFinite(minimumMeters) || minimumMeters < 0) {
       throw new Error('Données de recherche cyclable incorrectes.');
@@ -1292,7 +1296,7 @@ const SurfaceAnalysis = (() => {
 
     function isCyclingNetworkWay(tags) {
       const kind = cyclingFacilityKind(tags);
-      if (kind === 'Piste cyclable' || kind === 'Voie cyclable') return true;
+      if (kind === 'Piste cyclable' || kind === 'Voie cyclable' || kind === 'Rue cyclable') return true;
       if (kind === 'Chemin autorisé aux vélos' && tags.footway === 'crossing') return true;
       return kind === 'Bande ou piste cyclable' &&
         ['cycleway', 'cycleway:left', 'cycleway:right', 'cycleway:both']
@@ -1335,6 +1339,41 @@ const SurfaceAnalysis = (() => {
         }
       });
     }
+
+    // Une traversée de route, un rond-point ou un raccord non cartographié sépare souvent deux pistes
+    // sans nœud commun : une extrémité proche d'une autre piste suffit à les relier.
+    const bridgeCell = 0.0008;
+    const cellKey = point => `${Math.floor(point[0] / bridgeCell)}:${Math.floor(point[1] / bridgeCell)}`;
+    const nodeCells = new Map();
+    candidates.forEach((candidate, index) => {
+      candidate.coords.forEach(point => {
+        const key = cellKey(point);
+        if (!nodeCells.has(key)) nodeCells.set(key, []);
+        nodeCells.get(key).push({ index, point });
+      });
+    });
+    const union = (first, second) => {
+      let a = root(first), b = root(second);
+      if (a === b) return;
+      if (sizes[a] < sizes[b]) [a, b] = [b, a];
+      parents[b] = a;
+      sizes[a] += sizes[b];
+    };
+    candidates.forEach((candidate, index) => {
+      [candidate.coords[0], candidate.coords[candidate.coords.length - 1]].forEach(end => {
+        const y = Math.floor(end[0] / bridgeCell), x = Math.floor(end[1] / bridgeCell);
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            (nodeCells.get(`${y + dy}:${x + dx}`) || []).forEach(item => {
+              if (item.index !== index && root(item.index) !== root(index) &&
+                  distance(end, item.point) <= CYCLING_NETWORK_BRIDGE_METERS) {
+                union(index, item.index);
+              }
+            });
+          }
+        }
+      });
+    });
 
     const groups = new Map();
     const seenEdges = new Set();
@@ -1760,6 +1799,9 @@ const VeloProject = (() => {
     result.surfaceSummary = value.surfaceSummary == null
       ? null
       : surfaceSummary(value.surfaceSummary, SurfaceAnalysis.length(result.coords));
+    if (value.markedRouteMeters != null) {
+      result.markedRouteMeters = number(value.markedRouteMeters, 'distance sur véloroutes incorrecte.', 0, 1000000000);
+    }
     if (value.markedRoutes !== null) {
       if (!Array.isArray(value.markedRoutes) || value.markedRoutes.length > 20) invalid('véloroutes associées incorrectes.');
       result.markedRoute = {
@@ -2776,7 +2818,10 @@ const VeloGeocoding = (() => {
     }
 
     async function prepareRoutedGeometry(rawCoords, waypoints, automaticLoop, requiredStops = []) {
-      const cleaned = await sanitizeAndRepairOffRoadShortcuts(rawCoords, waypoints);
+      // Hors boucle, seules les étapes de l'utilisateur sont obligatoires : les ancres de guidage
+      // posées sur une véloroute peuvent être retirées si elles provoquent un aller-retour.
+      const preservedWaypoints = !automaticLoop && requiredStops.length ? requiredStops : waypoints;
+      const cleaned = await sanitizeAndRepairOffRoadShortcuts(rawCoords, preservedWaypoints);
       if (!automaticLoop) return cleaned;
       if (!Array.isArray(cleaned) || cleaned.length < 2 || !cleaned.every(point =>
         Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]) &&
@@ -3132,6 +3177,15 @@ const VeloGeocoding = (() => {
       return nearest;
     }
 
+    // Les circuits locaux ne doivent pas servir de raccourci face aux EuroVelo et véloroutes nationales ou régionales.
+    const MARKED_ROUTE_NETWORK_WEIGHTS = { INT: 1, NAT: 1, REG: 1.1, LOC: 1.8 };
+
+    function markedRouteNetworkWeight(routesById, routeId) {
+      const item = routesById && routesById.get(routeId);
+      const group = item && item.group ? String(item.group).toUpperCase() : '';
+      return MARKED_ROUTE_NETWORK_WEIGHTS[group] || 1.4;
+    }
+
     function shortestMarkedRoutePath(graph, startId, endId, routesById = null) {
       if (startId === endId) {
         return { points: [graph.nodes[startId].point], distanceMeters: 0, routeUsage: new Map() };
@@ -3186,7 +3240,8 @@ const VeloGeocoding = (() => {
           const incomingRouteId = previousRouteId[current.nodeId];
           const changesMarkedRoute = incomingRouteId !== null &&
             incomingRouteId !== edge.routeId;
-          const weightedDistance = edge.distance * (changesMarkedRoute ? 1.12 : 1);
+          const weightedDistance = edge.distance * markedRouteNetworkWeight(routesById, edge.routeId) *
+            (changesMarkedRoute ? 1.12 : 1);
           const distance = current.distance + weightedDistance;
           if (distance >= distances[edge.to]) return;
           distances[edge.to] = distance;
@@ -3291,9 +3346,9 @@ const VeloGeocoding = (() => {
             if (crossTrackMeters > maxDeviation) return;
             const binIndex = Math.min(binCount - 1, Math.floor(progress * binCount));
             const current = bestByBin[binIndex];
-            if (!current ||
-              crossTrackMeters < current.crossTrackMeters) {
-              bestByBin[binIndex] = { point, routeId: feature.id, crossTrackMeters };
+            const score = crossTrackMeters * markedRouteNetworkWeight(routesById, feature.id);
+            if (!current || score < current.score) {
+              bestByBin[binIndex] = { point, routeId: feature.id, crossTrackMeters, score };
             }
           });
         });
@@ -3353,8 +3408,10 @@ const VeloGeocoding = (() => {
       const segments = await fetchWaymarkedRouteSegments(relationIds, bbox);
       const routesById = new Map(routeItems.map(item => [Number(item.id), item]));
       const graph = buildMarkedRouteGraph(segments);
+      const measureMarkedRoute = buildMarkedRouteCoverage(graph, routesById);
+      const withCoverage = result => result && Object.assign(result, { measureMarkedRoute });
       const candidateNodeIds = graph.featureNodes.flatMap(feature => feature.nodeIds);
-      const corridorRoute = () => findMarkedRouteCorridor(waypoints, graph, routesById);
+      const corridorRoute = () => withCoverage(findMarkedRouteCorridor(waypoints, graph, routesById));
       if (!candidateNodeIds.length) return null;
       const nearestNodes = waypoints.map(waypoint =>
         findNearestMarkedRouteNode(graph, waypoint, candidateNodeIds)
@@ -3400,13 +3457,13 @@ const VeloGeocoding = (() => {
         .map(([routeId]) => routesById.get(routeId))
         .filter(Boolean);
       const route = routes[0] || routeItems[0];
-      return {
+      return withCoverage({
         route,
         routes,
         routingWaypoints,
         distanceMeters: totalDistanceMeters,
         accessDistanceMeters
-      };
+      });
     }
 
     function isSaneEuropeanRoute(route, coordsLatLng) {
@@ -3503,6 +3560,9 @@ const VeloGeocoding = (() => {
       const isBRouter = route => route.provider === 'brouter' || route.provider === 'brouter-profile-fallback';
       const providerOrder = Number(isBRouter(b)) - Number(isBRouter(a));
       if (providerOrder) return providerOrder;
+      // Par tranches de 10 % : une véloroute balisée prime, sans figer l'ordre sur un écart insignifiant.
+      const markedOrder = Math.round(markedRouteShare(b) * 10) - Math.round(markedRouteShare(a) * 10);
+      if (markedOrder) return markedOrder;
       const cyclingShare = route => {
         const surface = route.surfaceSummary || (route.enriched && route.enriched.surfaceSummary);
         return surface && surface.totalMeters > 0 && Number.isFinite(surface.cyclingMeters)
@@ -3511,6 +3571,81 @@ const VeloGeocoding = (() => {
       };
       return cyclingShare(b) - cyclingShare(a) ||
         (a.alternativeIndex || 0) - (b.alternativeIndex || 0);
+    }
+
+    function buildMarkedRouteCoverage(graph, routesById) {
+      const cellSize = 0.002;
+      const cells = new Map();
+      const key = (x, y) => `${x}:${y}`;
+      graph.nodes.forEach((node, fromId) => {
+        node.edges.forEach(edge => {
+          if (edge.to < fromId || markedRouteNetworkWeight(routesById, edge.routeId) >= 1.8) return;
+          const a = node.point, b = graph.nodes[edge.to].point;
+          const minX = Math.floor((Math.min(a[1], b[1]) - cellSize) / cellSize);
+          const maxX = Math.floor((Math.max(a[1], b[1]) + cellSize) / cellSize);
+          const minY = Math.floor((Math.min(a[0], b[0]) - cellSize) / cellSize);
+          const maxY = Math.floor((Math.max(a[0], b[0]) + cellSize) / cellSize);
+          if ((maxX - minX) * (maxY - minY) > 400) return;
+          for (let x = minX; x <= maxX; x++) {
+            for (let y = minY; y <= maxY; y++) {
+              const cellKey = key(x, y);
+              if (!cells.has(cellKey)) cells.set(cellKey, []);
+              cells.get(cellKey).push([a, b]);
+            }
+          }
+        });
+      });
+      const distanceToSegment = (point, [a, b]) => {
+        const scale = 111320 * Math.cos(point[0] * Math.PI / 180);
+        const ax = (a[1] - point[1]) * scale, ay = (a[0] - point[0]) * 111320;
+        const dx = (b[1] - a[1]) * scale, dy = (b[0] - a[0]) * 111320;
+        const square = dx * dx + dy * dy;
+        const ratio = square ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / square)) : 0;
+        return Math.hypot(ax + ratio * dx, ay + ratio * dy);
+      };
+      const isOnMarkedRoute = point => {
+        const segments = cells.get(key(Math.floor(point[1] / cellSize), Math.floor(point[0] / cellSize)));
+        return Boolean(segments && segments.some(segment => distanceToSegment(point, segment) <= 40));
+      };
+      return coords => {
+        let meters = 0;
+        for (let i = 1; i < coords.length; i++) {
+          const span = haversineMeters(coords[i - 1], coords[i]);
+          const samples = Math.max(1, Math.ceil(span / 50));
+          for (let j = 0; j < samples; j++) {
+            const ratio = (j + 0.5) / samples;
+            const point = [
+              coords[i - 1][0] + (coords[i][0] - coords[i - 1][0]) * ratio,
+              coords[i - 1][1] + (coords[i][1] - coords[i - 1][1]) * ratio
+            ];
+            if (isOnMarkedRoute(point)) meters += span / samples;
+          }
+        }
+        return meters;
+      };
+    }
+
+    function markedRouteShare(route) {
+      return route && route.distanceMeters > 0 && Number.isFinite(route.markedRouteMeters)
+        ? Math.min(1, route.markedRouteMeters / route.distanceMeters)
+        : 0;
+    }
+
+    const MAX_ROUTE_DETOUR_RATIO = 1.35;
+    const MAX_MARKED_ROUTE_DETOUR_BONUS = 0.4;
+    const ROUTE_DETOUR_TOLERANCE_METERS = 1500;
+
+    // Une variante majoritairement sur véloroute balisée peut être plus longue sans être écartée.
+    function rejectExcessiveDetours(candidates) {
+      const distances = candidates.map(route => Number(route.distanceMeters)).filter(value => value > 0);
+      if (!distances.length) return { kept: candidates, rejected: [] };
+      const shortest = Math.min(...distances);
+      const kept = [], rejected = [];
+      candidates.forEach(route => {
+        const ratio = MAX_ROUTE_DETOUR_RATIO + MAX_MARKED_ROUTE_DETOUR_BONUS * markedRouteShare(route);
+        (Number(route.distanceMeters) > shortest * ratio + ROUTE_DETOUR_TOLERANCE_METERS ? rejected : kept).push(route);
+      });
+      return { kept, rejected };
     }
 
     function selectDistinctRouteProposals(candidates) {
@@ -3636,7 +3771,10 @@ const VeloGeocoding = (() => {
         const cycling = surface && Number.isFinite(surface.cyclingMeters)
           ? ` · ${(surface.cyclingMeters / 1000).toFixed(1)} km d’aménagements cyclables OSM identifiés`
           : '';
-        details.textContent = `${distance}${distanceNotice}${duration} · ${profile} · ${routeType}${cycling}`;
+        const marked = Number.isFinite(route.markedRouteMeters)
+          ? ` · ${(route.markedRouteMeters / 1000).toFixed(1)} km sur véloroutes balisées (${Math.round(markedRouteShare(route) * 100)} %)`
+          : '';
+        details.textContent = `${distance}${distanceNotice}${duration} · ${profile} · ${routeType}${marked}${cycling}`;
 
         const comparison = document.createElement('span');
         comparison.style.cssText = 'font-size:10px;color:#64748b;';
@@ -3680,7 +3818,11 @@ const VeloGeocoding = (() => {
       routeLayerGroup.clearLayers();
       editableRouteHandlesGroup.clearLayers();
       const colors = ['#ea580c', '#0284c7', '#7c3aed'];
+      // Seule l'option choisie reste sur la carte ; les autres réapparaissent lorsqu'on les sélectionne dans la liste.
+      const hasSelection = Boolean(routeAlternatives[selectedRouteAlternativeIndex]);
+      const isVisible = index => !hasSelection || index === selectedRouteAlternativeIndex;
       routeAlternatives.forEach((route, index) => {
+        if (!isVisible(index)) return;
         const selected = index === selectedRouteAlternativeIndex;
         const line = L.polyline(route.coords, {
           color: colors[index % colors.length],
@@ -3699,7 +3841,7 @@ const VeloGeocoding = (() => {
         coords: route.coords,
         color: colors[index % colors.length],
         opacity: index === selectedRouteAlternativeIndex ? 1 : 0.7
-      })));
+      })).filter((_, index) => isVisible(index)));
       const selectedRoute = routeAlternatives[selectedRouteAlternativeIndex];
       if (selectedRoute && selectedRoute.coords.length >= 2) {
         renderEditableRouteHandles(selectedRoute.coords, colors[selectedRouteAlternativeIndex % colors.length]);
@@ -5432,7 +5574,7 @@ const VeloGeocoding = (() => {
     }
 
     function buildCyclingNetworkQuery(around) {
-      return `[out:json][timeout:20];(way(${around})["highway"="cycleway"];way(${around})["highway"~"^(path|footway|pedestrian|track)$"]["bicycle"="designated"];way(${around})["footway"="crossing"]["bicycle"~"^(yes|designated|permissive)$"];way(${around})["cycleway"~"^(track|opposite_track)$"];way(${around})["cycleway:left"~"^(track|opposite_track)$"];way(${around})["cycleway:right"~"^(track|opposite_track)$"];way(${around})["cycleway:both"~"^(track|opposite_track)$"];);out body geom;`;
+      return `[out:json][timeout:20];(way(${around})["highway"="cycleway"];way(${around})["highway"~"^(path|footway|pedestrian|track)$"]["bicycle"="designated"];way(${around})["footway"="crossing"]["bicycle"~"^(yes|designated|permissive)$"];way(${around})["cycleway"~"^(track|opposite_track)$"];way(${around})["cycleway:left"~"^(track|opposite_track)$"];way(${around})["cycleway:right"~"^(track|opposite_track)$"];way(${around})["cycleway:both"~"^(track|opposite_track)$"];way(${around})["cyclestreet"="yes"];way(${around})["bicycle_road"="yes"];);out body geom;`;
     }
 
     function setGreenwaysOverlayStatus(message) {
@@ -5854,7 +5996,12 @@ const VeloGeocoding = (() => {
       setStatus(`${routeGuidanceMessage} Calcul des options...`);
       setRouteDownloadProgress(42, true);
       const [guided, direct] = await Promise.all([
-        fetchOsrmRouteAlternatives(routingWaypoints, percent => setRouteDownloadProgress(percent, true)),
+        fetchOsrmRouteAlternatives(
+          routingWaypoints,
+          percent => setRouteDownloadProgress(percent, true),
+          false,
+          markedRoute ? directWaypoints : []
+        ),
         markedRoute && routingWaypoints.length > directWaypoints.length
           ? Promise.all([0, 1, 2].map(index => fetchOsrmRoute(directWaypoints, 'bike', index, index === 0)))
           : Promise.resolve([])
@@ -5862,7 +6009,14 @@ const VeloGeocoding = (() => {
       if (requestId !== routeAlternativesRequestId) return;
       if (markedRoute) guided.forEach(route => { route.markedRoute = markedRoute; });
       const directCandidates = direct.filter(route => isSaneEuropeanRoute(route, directWaypoints));
-      const alternatives = selectDistinctRouteProposals([...guided, ...directCandidates]);
+      if (markedRoute && typeof markedRoute.measureMarkedRoute === 'function') {
+        [...guided, ...directCandidates].forEach(route => {
+          route.markedRouteMeters = markedRoute.measureMarkedRoute(route.coords);
+        });
+      }
+      const { kept: candidates, rejected: excessiveDetours } =
+        rejectExcessiveDetours([...guided, ...directCandidates]);
+      const alternatives = selectDistinctRouteProposals(candidates);
       if (!alternatives.length) {
         setRouteDownloadProgress(0, false);
         setStatus('Aucun itinéraire calculé. Les étapes sont conservées ; vérifiez la connexion et réessayez.');
@@ -5872,6 +6026,9 @@ const VeloGeocoding = (() => {
         routeGuidanceMessage = 'L’option 1 privilégie un trajet hors du couloir balisé ; les autres variantes disponibles peuvent suivre les véloroutes.';
       } else if (markedRoute && alternatives.some(route => !route.markedRoute)) {
         routeGuidanceMessage += ' Les autres options recherchent aussi des voies cyclables hors de ce couloir.';
+      }
+      if (excessiveDetours.length) {
+        routeGuidanceMessage += ` ${excessiveDetours.length} variante(s) écartée(s) : détour supérieur à ${Math.round((MAX_ROUTE_DETOUR_RATIO - 1) * 100)} % par rapport au trajet le plus court.`;
       }
       setRouteDownloadProgress(100, true);
       routeAlternatives = alternatives;
@@ -7152,6 +7309,7 @@ const VeloGeocoding = (() => {
           routingProfile: String(route.routingProfile || ''),
           alternativeIndex: Number.isFinite(route.alternativeIndex) ? route.alternativeIndex : 0,
           surfaceSummary: route.surfaceSummary || null,
+          markedRouteMeters: Number.isFinite(route.markedRouteMeters) ? route.markedRouteMeters : null,
           enriched: serializableRoute(route.enriched),
           markedRoutes: route.markedRoute && Array.isArray(route.markedRoute.routes)
             ? route.markedRoute.routes.slice(0, 20).map(item => ({
